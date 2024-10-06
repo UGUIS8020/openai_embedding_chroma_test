@@ -51,7 +51,7 @@ def process_file(file_path):
         # OpenAI APIを使用して画像の説明を生成
         try:
             response = client.chat.completions.create(
-                model="gpt-4-vision-0125",  # 更新されたモデル名
+                model="gpt-4o",  # 更新されたモデル名
                 messages=[
                     {
                         "role": "user",
