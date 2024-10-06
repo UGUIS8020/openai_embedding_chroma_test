@@ -1,15 +1,22 @@
-from langchain_chroma import Chroma
-from langchain_openai import OpenAIEmbeddings
-from langchain.docstore.document import Document
 import os
 import json
 from PIL import Image
-import numpy as np
+import io
+import base64
+from openai import OpenAI
+# from langchain_community.vectorstores import Chroma
+from langchain_chroma.vectorstores import Chroma
+from langchain_openai import OpenAIEmbeddings
+from langchain.docstore.document import Document
 from dotenv import load_dotenv
+import torch
+from torchvision.transforms import Compose, Resize, CenterCrop, ToTensor, Normalize
+from transformers import CLIPProcessor, CLIPModel
 
 # OpenAI API キーの設定
 load_dotenv()
 openai_api_key = os.getenv('OPENAI_API_KEY')
+client = OpenAI(api_key=openai_api_key)
 
 # OpenAI Embeddings の初期化
 embedding_model = OpenAIEmbeddings(model="text-embedding-3-large")
@@ -21,6 +28,7 @@ chroma_db = Chroma(persist_directory=persist_directory, embedding_function=embed
 def process_file(file_path):
     _, file_extension = os.path.splitext(file_path)
     
+    # テキストまたはJSONファイルの処理
     if file_extension in ['.json', '.txt']:
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
@@ -28,31 +36,84 @@ def process_file(file_path):
         if file_extension == '.json':
             content = json.dumps(json.loads(content))  # JSON を整形された文字列に変換
         
+        # テキストのエンベディングを生成
         embedding = embedding_model.embed_query(content)
         return content, embedding
     
+    # 画像ファイルの処理
     elif file_extension in ['.png', '.jpg', '.jpeg']:
-        # 画像ファイルの処理
-        # ここでは画像の内容を文字列として扱います
-        return f"Image file: {file_path}", None
+        with open(file_path, 'rb') as image_file:
+            image_data = image_file.read()
+        
+        # Base64エンコードされた画像データを準備
+        base64_image = base64.b64encode(image_data).decode('utf-8')
+        
+        # OpenAI APIを使用して画像の説明を生成
+        try:
+            response = client.chat.completions.create(
+                model="gpt-4-vision-0125",  # 更新されたモデル名
+                messages=[
+                    {
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": "この画像を簡潔に説明してください。"},
+                            {
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{base64_image}"
+                                }
+                            }
+                        ]
+                    }
+                ],
+                max_tokens=300
+            )
+            
+            description = response.choices[0].message.content
+        except Exception as e:
+            print(f"Error processing image {file_path}: {str(e)}")
+            return None, None
+        
+        # 画像の説明文のエンベディングを生成
+        embedding = embedding_model.embed_query(description)
+        
+        return description, embedding
     
     else:
         return None, None
 
 def main():
-    data_directory = "./data/jpg"
-    for filename in os.listdir(data_directory):
-        file_path = os.path.join(data_directory, filename)
-        content, embedding = process_file(file_path)
+    data_directories = {
+        "image": "./data/jpg",
+        "text": "./data/txt",
+        "json": "./data/json"
+    }
+    
+    for data_type, directory in data_directories.items():
+        if not os.path.exists(directory):
+            print(f"ディレクトリが存在しません: {directory}")
+            continue
         
-        if content is not None:
-            metadata = {"filename": filename, "type": os.path.splitext(filename)[1][1:]}
+        for filename in os.listdir(directory):
+            file_path = os.path.join(directory, filename)
+            content, embedding = process_file(file_path)
             
-            # Documentオブジェクトを作成
-            doc = Document(page_content=content, metadata=metadata)
-            
-            # add_documents メソッドを使用
-            chroma_db.add_documents([doc], ids=[filename])
+            if content is not None and embedding is not None:
+                metadata = {
+                    "filename": filename,
+                    "type": data_type,
+                    "file_extension": os.path.splitext(filename)[1][1:]
+                }
+                
+                # Documentオブジェクトを作成
+                doc = Document(page_content=content, metadata=metadata)
+                
+                try:
+                    # add_documents メソッドを使用
+                    chroma_db.add_documents([doc], ids=[filename])
+                    print(f"ファイルを処理しました: {filename}")
+                except Exception as e:
+                    print(f"Error adding document {filename} to Chroma: {str(e)}")
     
     print("処理が完了しました。ベクトルストアに保存されました。")
 

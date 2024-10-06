@@ -5,6 +5,10 @@
   },
   {
     "page": 2,
+     "title": {
+    "en": "Autologous tooth transplantation and informed consent",
+    "ja": "自家歯牙移植とインフォームドコンセント"
+  },
     "contents": [
       {
         "text_file": "page02.txt",
