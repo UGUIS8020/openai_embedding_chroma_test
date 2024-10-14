@@ -84,10 +84,10 @@ def process_file(file_path):
 
 def main():
     data_directories = {
-        "image": "./data/jpg",
-        "text": "./data/txt",
-        "json": "./data/json"
-    }
+    "image": "./data/渋谷歯科技工所",
+    "text": "./data/渋谷歯科技工所",
+    "json": "./data/渋谷歯科技工所"
+}
     
     for data_type, directory in data_directories.items():
         if not os.path.exists(directory):
