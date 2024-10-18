@@ -33,8 +33,11 @@ def process_file(file_path):
         with open(file_path, 'r', encoding='utf-8') as f:
             content = f.read()
         
+        # if file_extension == '.json':
+        #     content = json.dumps(json.loads(content))  # JSON を整形された文字列に変換
+
         if file_extension == '.json':
-            content = json.dumps(json.loads(content))  # JSON を整形された文字列に変換
+            content = json.loads(content)  # 辞書形式でJSONを扱う
         
         # テキストのエンベディングを生成
         embedding = embedding_model.embed_query(content)
@@ -83,39 +86,43 @@ def process_file(file_path):
         return None, None
 
 def main():
-    data_directories = {
-    "image": "./data/渋谷歯科技工所",
-    "text": "./data/渋谷歯科技工所",
-    "json": "./data/渋谷歯科技工所"
-}
+    data_directory = "./data/渋谷歯科技工所"
     
-    for data_type, directory in data_directories.items():
-        if not os.path.exists(directory):
-            print(f"ディレクトリが存在しません: {directory}")
-            continue
+    if not os.path.exists(data_directory):
+        print(f"ディレクトリが存在しません: {data_directory}")
+        return
+    
+    for filename in os.listdir(data_directory):
+        file_path = os.path.join(data_directory, filename)
+        content, embedding = process_file(file_path)
         
-        for filename in os.listdir(directory):
-            file_path = os.path.join(directory, filename)
-            content, embedding = process_file(file_path)
+        if content is not None and embedding is not None:
+            _, file_extension = os.path.splitext(filename)
+            metadata = {
+                "filename": filename,
+                "type": get_file_type(file_extension),
+                "file_extension": file_extension[1:]  # 先頭の'.'を除去
+            }
             
-            if content is not None and embedding is not None:
-                metadata = {
-                    "filename": filename,
-                    "type": data_type,
-                    "file_extension": os.path.splitext(filename)[1][1:]
-                }
-                
-                # Documentオブジェクトを作成
-                doc = Document(page_content=content, metadata=metadata)
-                
-                try:
-                    # add_documents メソッドを使用
-                    chroma_db.add_documents([doc], ids=[filename])
-                    print(f"ファイルを処理しました: {filename}")
-                except Exception as e:
-                    print(f"Error adding document {filename} to Chroma: {str(e)}")
-    
+            # Documentオブジェクトを作成
+            doc = Document(page_content=content, metadata=metadata)
+            
+            try:
+                # add_documents メソッドを使用
+                chroma_db.add_documents([doc], ids=[filename])
+                print(f"ファイルを処理しました: {filename}")
+            except Exception as e:
+                print(f"Error adding document {filename} to Chroma: {str(e)}")
+
     print("処理が完了しました。ベクトルストアに保存されました。")
+
+def get_file_type(file_extension):
+    if file_extension.lower() in ['.png', '.jpg', '.jpeg']:
+        return "image"
+    elif file_extension.lower() == '.json':
+        return "json"
+    else:
+        return "text"
 
 if __name__ == "__main__":
     main()
