@@ -1,0 +1,9 @@
+[markdown]
+## Run Template
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app = RemoteRunnable("http://localhost:8000/rag-codellama-fireworks")
+rag_app.invoke("How can I initialize a ReAct agent?")
+

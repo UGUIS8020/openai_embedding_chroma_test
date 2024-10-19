@@ -1,0 +1,110 @@
+[markdown]
+# INVALID_TOOL_RESULTS
+
+You are passing too many, too few, or mismatched [`ToolMessages`](https://api.js.langchain.com/classes/_langchain_core.messages_tool.ToolMessage.html) to a model.
+
+When [using a model to call tools](/docs/concepts#functiontool-calling), the [`AIMessage`](https://api.js.langchain.com/classes/_langchain_core.messages.AIMessage.html)
+the model responds with will contain a `tool_calls` array. To continue the flow, the next messages you pass back to the model must
+be exactly one `ToolMessage` for each item in that array containing the result of that tool call. Each `ToolMessage` must have a `tool_call_id` field
+that matches one of the `tool_calls` on the `AIMessage`.
+
+For example, given the following response from a model:
+
+[code]
+from typing import List
+
+from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+
+model = ChatOpenAI(model="gpt-4o-mini")
+
+
+@tool
+def foo_tool() -> str:
+    """
+    A dummy tool that returns 'action complete!'
+    """
+    return "action complete!"
+
+
+model_with_tools = model.bind_tools([foo_tool])
+
+chat_history: List[BaseMessage] = [
+    HumanMessage(content='Call tool "foo" twice with no arguments')
+]
+
+response_message = model_with_tools.invoke(chat_history)
+
+print(response_message.tool_calls)
+
+[output]
+[{'name': 'foo_tool', 'args': {}, 'id': 'call_dq9O0eGHrryBwDRCnk0deHK4', 'type': 'tool_call'}, {'name': 'foo_tool', 'args': {}, 'id': 'call_mjLuNyXNHoUIXHiBtXhaWdxN', 'type': 'tool_call'}]
+
+
+[markdown]
+Calling the model with only one tool response would result in an error:
+
+[code]
+from langchain_core.messages import AIMessage, ToolMessage
+
+tool_call = response_message.tool_calls[0]
+tool_response = foo_tool.invoke(tool_call)
+
+chat_history.append(
+    AIMessage(
+        content=response_message.content,
+        additional_kwargs=response_message.additional_kwargs,
+    )
+)
+chat_history.append(
+    ToolMessage(content=str(tool_response), tool_call_id=tool_call.get("id"))
+)
+
+final_response = model_with_tools.invoke(chat_history)
+print(final_response)
+
+[markdown]
+If we add a second response, the call will succeed as expected because we now have one tool response per tool call:
+
+[code]
+tool_response_2 = foo_tool.invoke(response_message.tool_calls[1])
+
+chat_history.append(tool_response_2)
+
+model_with_tools.invoke(chat_history)
+
+[output]
+AIMessage(content='Both calls to the tool "foo" have been completed successfully. The output for each call is "action complete!".', additional_kwargs={'refusal': None}, response_metadata={'token_usage': {'completion_tokens': 24, 'prompt_tokens': 137, 'total_tokens': 161, 'completion_tokens_details': {'audio_tokens': None, 'reasoning_tokens': 0}, 'prompt_tokens_details': {'audio_tokens': None, 'cached_tokens': 0}}, 'model_name': 'gpt-4o-mini-2024-07-18', 'system_fingerprint': 'fp_e2bde53e6e', 'finish_reason': 'stop', 'logprobs': None}, id='run-b5ac3c54-4e26-4da4-853a-d0ab1cba90e0-0', usage_metadata={'input_tokens': 137, 'output_tokens': 24, 'total_tokens': 161, 'input_token_details': {'cache_read': 0}, 'output_token_details': {'reasoning': 0}})
+
+[markdown]
+But if we add a duplicate, extra tool response, the call will fail again:
+
+[code]
+duplicate_tool_response_2 = foo_tool.invoke(response_message.tool_calls[1])
+
+chat_history.append(duplicate_tool_response_2)
+
+await model_with_tools.invoke(chat_history)
+
+[markdown]
+You should additionally not pass `ToolMessages` back to to a model if they are not preceded by an `AIMessage` with tool calls. For example, this will fail:
+
+[code]
+model_with_tools.invoke(
+    [ToolMessage(content="action completed!", tool_call_id="dummy")]
+)
+
+[markdown]
+See [this guide](/docs/how_to/tool_results_pass_to_model/) for more details on tool calling.
+
+## Troubleshooting
+
+The following may help resolve this error:
+
+- If you are using a custom executor rather than a prebuilt one like LangGraph's [`ToolNode`](https://langchain-ai.github.io/langgraphjs/reference/classes/langgraph_prebuilt.ToolNode.html)
+  or the legacy LangChain [AgentExecutor](/docs/how_to/agent_executor), verify that you are invoking and returning the result for one tool per tool call.
+- If you are using [few-shot tool call examples](/docs/how_to/tools_few_shot) with messages that you manually create, and you want to simulate a failure,
+  you still need to pass back a `ToolMessage` whose content indicates that failure.
+
+

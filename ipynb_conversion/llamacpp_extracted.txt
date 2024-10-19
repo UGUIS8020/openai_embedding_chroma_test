@@ -1,0 +1,38 @@
+[markdown]
+# Llama.cpp
+
+>[llama.cpp python](https://github.com/abetlen/llama-cpp-python) library is a simple Python bindings for `@ggerganov`
+>[llama.cpp](https://github.com/ggerganov/llama.cpp).
+>
+>This package provides:
+>
+> - Low-level access to C API via ctypes interface.
+> - High-level Python API for text completion
+>   - `OpenAI`-like API
+>   - `LangChain` compatibility
+>   - `LlamaIndex` compatibility
+> - OpenAI compatible web server
+>   - Local Copilot replacement
+>   - Function Calling support
+>   - Vision API support
+>   - Multiple Models
+
+
+[code]
+%pip install --upgrade --quiet  llama-cpp-python
+
+[code]
+from langchain_community.embeddings import LlamaCppEmbeddings
+
+[code]
+llama = LlamaCppEmbeddings(model_path="/path/to/model/ggml-model-q4_0.bin")
+
+[code]
+text = "This is a test document."
+
+[code]
+query_result = llama.embed_query(text)
+
+[code]
+doc_result = llama.embed_documents([text])
+

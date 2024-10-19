@@ -1,0 +1,45 @@
+[markdown]
+# Aleph Alpha
+
+There are two possible ways to use Aleph Alpha's semantic embeddings. If you have texts with a dissimilar structure (e.g. a Document and a Query) you would want to use asymmetric embeddings. Conversely, for texts with comparable structures, symmetric embeddings are the suggested approach.
+
+[markdown]
+## Asymmetric
+
+[code]
+from langchain_community.embeddings import AlephAlphaAsymmetricSemanticEmbedding
+
+[code]
+document = "This is a content of the document"
+query = "What is the content of the document?"
+
+[code]
+embeddings = AlephAlphaAsymmetricSemanticEmbedding(normalize=True, compress_to_size=128)
+
+[code]
+doc_result = embeddings.embed_documents([document])
+
+[code]
+query_result = embeddings.embed_query(query)
+
+[markdown]
+## Symmetric
+
+[code]
+from langchain_community.embeddings import AlephAlphaSymmetricSemanticEmbedding
+
+[code]
+text = "This is a test text"
+
+[code]
+embeddings = AlephAlphaSymmetricSemanticEmbedding(normalize=True, compress_to_size=128)
+
+[code]
+doc_result = embeddings.embed_documents([text])
+
+[code]
+query_result = embeddings.embed_query(text)
+
+[code]
+
+

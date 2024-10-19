@@ -1,0 +1,14 @@
+[markdown]
+# Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain_ext, path="/rag-weaviate")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app_weaviate = RemoteRunnable("http://localhost:8000/rag-weaviate")
+rag_app_weaviate.invoke("How does agent memory work?")
+

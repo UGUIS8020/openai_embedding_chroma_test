@@ -1,0 +1,99 @@
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain_rag_timescale_conv, path="/rag_timescale_conversation")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app = RemoteRunnable("http://0.0.0.0:8000/rag_timescale_conversation")
+
+[markdown]
+First, setup the history
+
+[code]
+question = "My name is Sven Klemm"
+answer = rag_app.invoke(
+    {
+        "question": question,
+        "chat_history": [],
+    }
+)
+chat_history = [(question, answer)]
+
+[markdown]
+Next, use the history for a question
+
+[code]
+
+answer = rag_app.invoke(
+    {
+        "question": "What commits did the person with my name make?",
+        "chat_history": chat_history,
+    }
+)
+answer
+
+[output]
+'The person named Sven Klemm made the following commits:\n\n1. Commit "a31c9b9f8cdfe8643499b710dc983e5c5d6457e4" on "Mon May 22 11:34:06 2023 +0200" with the change summary "Increase number of sqlsmith loops in nightly CI". The change details are "To improve coverage with sqlsmith we run it for longer in the scheduled nightly run."\n\n2. Commit "e4ba2bcf560568ae68f3775c058f0a8d7f7c0501" on "Wed Nov 9 09:29:36 2022 +0100" with the change summary "Remove debian 9 from packages tests." The change details are "Debian 9 is EOL since July 2022 so we won\'t build packages for it anymore and can remove it from CI."'
+
+[markdown]
+## Filter by time
+
+You can also use timed filters. For example, the sample dataset doesn't include any commits before 2010, so this should return no matches.
+
+[code]
+answer = rag_app.invoke(
+    {
+        "question": "What commits did the person with my name make?",
+        "chat_history": chat_history,
+        "end_date": "2016-01-01 00:00:00",
+    }
+)
+answer
+
+
+[output]
+'The context does not provide any information about any commits made by a person named Sven Klemm.'
+
+[markdown]
+However, there is data from 2022, which can be used
+
+[code]
+answer = rag_app.invoke(
+    {
+        "question": "What commits did the person with my name make?",
+        "chat_history": chat_history,
+        "start_date": "2020-01-01 00:00:00",
+        "end_date": "2023-01-01 00:00:00",
+    }
+)
+answer
+
+[output]
+'The person named Sven Klemm made the following commits:\n\n1. "e4ba2bcf560568ae68f3775c058f0a8d7f7c0501" with the change summary "Remove debian 9 from packages tests." The details of this change are that "Debian 9 is EOL since July 2022 so we won\'t build packages for it anymore and can remove it from CI."\n\n2. "2f237e6e57e5ac66c126233d66969a1f674ffaa4" with the change summary "Add Enterprise Linux 9 packages to RPM package test". The change details for this commit are not provided.'
+
+[markdown]
+## Filter by metadata
+
+You can also filter by metadata using this chain
+
+[code]
+answer = rag_app.invoke(
+    {
+        "question": "What commits did the person with my name make?",
+        "chat_history": chat_history,
+        "metadata_filter": {"commit_hash": " 5cd2c038796fb302190b080c90e5acddbef4b8d1"},
+    }
+)
+answer
+
+[output]
+'The person named Sven Klemm made a commit with the ID "5cd2c038796fb302190b080c90e5acddbef4b8d1". The change summary for this commit is "Simplify windows-build-and-test-ignored.yaml" and the change details are "Remove code not needed for the skip workflow of the windows test." The commit was made on "Sat Mar 4 10:18:34 2023 +0100".'
+
+[code]
+
+

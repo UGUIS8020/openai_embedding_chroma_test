@@ -1,0 +1,18 @@
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain_private, path="/rag_chroma_private")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app = RemoteRunnable("http://0.0.0.0:8001/rag_chroma_private/")
+rag_app.invoke("How does agent memory work?")
+
+[output]
+ Based on the provided context, agent memory is a long-term memory module that records a comprehensive list of agents' experiences in natural language. Each element is an observation or event directly provided by the agent, and inter-agent communication can trigger new natural language statements. The agent memory is complemented by several key components, including LLM (large language model) as the agent's brain, planning, reflection, and memory mechanisms. The design of generative agents combines LLM with memory, planning, and reflection mechanisms to enable agents to behave conditioned on past experiences and interact with other agents. The agent learns to call external APIs for missing information, including current information, code execution capability, access to proprietary information sources, and more. In summary, the agent memory works by recording and storing observations and events in natural language, allowing the agent to retrieve and use this information to inform its behavior.
+
+

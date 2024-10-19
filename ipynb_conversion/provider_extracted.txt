@@ -1,0 +1,10 @@
+[markdown]
+# __ModuleName__
+
+__ModuleName__ is a platform that offers...
+
+[code]
+from __module_name__ import Chat__ModuleName__
+from __module_name__ import __ModuleName__LLM
+from __module_name__ import __ModuleName__VectorStore
+

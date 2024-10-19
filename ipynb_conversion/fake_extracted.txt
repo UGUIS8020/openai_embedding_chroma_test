@@ -1,0 +1,17 @@
+[markdown]
+# Fake Embeddings
+
+LangChain also provides a fake embedding class. You can use this to test your pipelines.
+
+[code]
+from langchain_community.embeddings import FakeEmbeddings
+
+[code]
+embeddings = FakeEmbeddings(size=1352)
+
+[code]
+query_result = embeddings.embed_query("foo")
+
+[code]
+doc_results = embeddings.embed_documents(["foo"])
+

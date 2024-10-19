@@ -1,0 +1,160 @@
+[markdown]
+# __ModuleName__VectorStore
+
+This notebook covers how to get started with the __ModuleName__ vector store.
+
+[markdown]
+## Setup
+
+- TODO: Update with relevant info.
+- TODO: Update minimum version to be correct.
+
+To access __ModuleName__ vector stores you'll need to create a/an __ModuleName__ account, get an API key, and install the `__package_name__` integration package.
+
+[markdown]
+### Credentials
+
+- TODO: Update with relevant info.
+
+Head to (TODO: link) to sign up to __ModuleName__ and generate an API key. Once you've done this set the __MODULE_NAME___API_KEY environment variable:
+
+[code]
+import getpass
+import os
+
+if not os.getenv("__MODULE_NAME___API_KEY"):
+    os.environ["__MODULE_NAME___API_KEY"] = getpass.getpass("Enter your __ModuleName__ API key: ")
+
+[markdown]
+If you want to get automated tracing of your model calls you can also set your [LangSmith](https://docs.smith.langchain.com/) API key by uncommenting below:
+
+[code]
+# os.environ["LANGSMITH_API_KEY"] = getpass.getpass("Enter your LangSmith API key: ")
+# os.environ["LANGSMITH_TRACING"] = "true"
+
+[markdown]
+## Initialization
+
+- TODO: Fill out with relevant init params
+
+
+```{=mdx}
+import EmbeddingTabs from "@theme/EmbeddingTabs";
+
+<EmbeddingTabs/>
+```
+
+[code]
+from __module_name__.vectorstores import __ModuleName__VectorStore
+
+vector_store = __ModuleName__VectorStore(embeddings=embeddings)
+
+[markdown]
+## Manage vector store
+
+### Add items to vector store
+
+- TODO: Edit and then run code cell to generate output
+
+[code]
+from langchain_core.documents import Document
+
+document_1 = Document(
+    page_content="foo",
+    metadata={"source": "https://example.com"}
+)
+
+document_2 = Document(
+    page_content="bar",
+    metadata={"source": "https://example.com"}
+)
+
+document_3 = Document(
+    page_content="baz",
+    metadata={"source": "https://example.com"}
+)
+
+documents = [document_1, document_2, document_3]
+
+vector_store.add_documents(documents=documents,ids=["1","2","3"])
+
+[markdown]
+### Update items in vector store
+
+- TODO: Edit and then run code cell to generate output
+
+[code]
+updated_document = Document(
+    page_content="qux",
+    metadata={"source": "https://another-example.com"}
+)
+
+vector_store.update_documents(document_id="1",document=updated_document)
+
+[markdown]
+### Delete items from vector store
+
+- TODO: Edit and then run code cell to generate output
+
+[code]
+vector_store.delete(ids=["3"])
+
+[markdown]
+## Query vector store
+
+Once your vector store has been created and the relevant documents have been added you will most likely wish to query it during the running of your chain or agent. 
+
+### Query directly
+
+Performing a simple similarity search can be done as follows:
+
+- TODO: Edit and then run code cell to generate output
+
+[code]
+results = vector_store.similarity_search(query="thud",k=1,filter={"source":"https://another-example.com"})
+for doc in results:
+    print(f"* {doc.page_content} [{doc.metadata}]")
+
+[markdown]
+If you want to execute a similarity search and receive the corresponding scores you can run:
+
+- TODO: Edit and then run code cell to generate output
+
+[code]
+results = vector_store.similarity_search_with_score(query="thud",k=1,filter={"source":"https://example.com"})
+for doc, score in results:
+    print(f"* [SIM={score:3f}] {doc.page_content} [{doc.metadata}]")
+
+[markdown]
+### Query by turning into retriever
+
+You can also transform the vector store into a retriever for easier usage in your chains. 
+
+- TODO: Edit and then run code cell to generate output
+
+[code]
+retriever = vector_store.as_retriever(
+    search_type="mmr",
+    search_kwargs={"k": 1}
+)
+retriever.invoke("thud")
+
+[markdown]
+## Usage for retrieval-augmented generation
+
+For guides on how to use this vector store for retrieval-augmented generation (RAG), see the following sections:
+
+- [Tutorials: working with external knowledge](https://python.langchain.com/docs/tutorials/#working-with-external-knowledge)
+- [How-to: Question and answer with RAG](https://python.langchain.com/docs/how_to/#qa-with-rag)
+- [Retrieval conceptual docs](https://python.langchain.com/docs/concepts/#retrieval)
+
+[markdown]
+## TODO: Any functionality specific to this vector store
+
+E.g. creating a persisten database to save to your disk, etc.
+
+[markdown]
+## API reference
+
+For detailed documentation of all __ModuleName__VectorStore features and configurations head to the API reference: https://api.python.langchain.com/en/latest/vectorstores/__module_name__.vectorstores.__ModuleName__VectorStore.html
+

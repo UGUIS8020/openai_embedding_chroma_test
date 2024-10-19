@@ -1,0 +1,290 @@
+[markdown]
+# Embedding Documents using Optimized and Quantized Embedders
+
+In this tutorial, we will demo how to build a RAG pipeline, with the embedding for all documents done using Quantized Embedders.
+
+We will use a pipeline that will:
+
+* Create a document collection.
+* Embed all documents using Quantized Embedders.
+* Fetch relevant documents for our question.
+* Run an LLM answer the question.
+
+For more information about optimized models, we refer to [optimum-intel](https://github.com/huggingface/optimum-intel.git) and [IPEX](https://github.com/intel/intel-extension-for-pytorch).
+
+This tutorial is based on the [Langchain RAG tutorial here](https://towardsai.net/p/machine-learning/dense-x-retrieval-technique-in-langchain-and-llamaindex).
+
+[code]
+import uuid
+from pathlib import Path
+
+import langchain
+import torch
+from bs4 import BeautifulSoup as Soup
+from langchain.retrievers.multi_vector import MultiVectorRetriever
+from langchain.storage import InMemoryByteStore, LocalFileStore
+from langchain_chroma import Chroma
+from langchain_community.document_loaders.recursive_url_loader import (
+    RecursiveUrlLoader,
+)
+
+# For our example, we'll load docs from the web
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+DOCSTORE_DIR = "."
+DOCSTORE_ID_KEY = "doc_id"
+
+[markdown]
+Lets first load up this paper, and split into text chunks of size 1000.
+
+[code]
+# Could add more parsing here, as it's very raw.
+loader = RecursiveUrlLoader(
+    "https://ar5iv.labs.arxiv.org/html/1706.03762",
+    max_depth=2,
+    extractor=lambda x: Soup(x, "html.parser").text,
+)
+data = loader.load()
+print(f"Loaded {len(data)} documents")
+
+# Split
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=0)
+all_splits = text_splitter.split_documents(data)
+print(f"Split into {len(all_splits)} documents")
+
+[output]
+Loaded 1 documents
+Split into 73 documents
+
+
+[markdown]
+In order to embed our documents, we can use the ```QuantizedBiEncoderEmbeddings```, for efficient and fast embedding. 
+
+[code]
+from langchain_community.embeddings import QuantizedBiEncoderEmbeddings
+from langchain_core.embeddings import Embeddings
+
+model_name = "Intel/bge-small-en-v1.5-rag-int8-static"
+encode_kwargs = {"normalize_embeddings": True}  # set True to compute cosine similarity
+
+model_inc = QuantizedBiEncoderEmbeddings(
+    model_name=model_name,
+    encode_kwargs=encode_kwargs,
+    query_instruction="Represent this sentence for searching relevant passages: ",
+)
+
+[output]
+config.json:   0%|          | 0.00/747 [00:00<?, ?B/s]
+pytorch_model.bin:   0%|          | 0.00/45.9M [00:00<?, ?B/s]
+inc_config.json:   0%|          | 0.00/287 [00:00<?, ?B/s]
+loading configuration file inc_config.json from cache at 
+INCConfig {
+  "distillation": {},
+  "neural_compressor_version": "2.4.1",
+  "optimum_version": "1.16.2",
+  "pruning": {},
+  "quantization": {
+    "dataset_num_samples": 50,
+    "is_static": true
+  },
+  "save_onnx_model": false,
+  "torch_version": "2.2.0",
+  "transformers_version": "4.37.2"
+}
+
+Using `INCModel` to load a TorchScript model will be deprecated in v1.15.0, to load your model please use `IPEXModel` instead.
+
+tokenizer_config.json:   0%|          | 0.00/1.24k [00:00<?, ?B/s]
+vocab.txt:   0%|          | 0.00/232k [00:00<?, ?B/s]
+tokenizer.json:   0%|          | 0.00/711k [00:00<?, ?B/s]
+special_tokens_map.json:   0%|          | 0.00/125 [00:00<?, ?B/s]
+
+[markdown]
+With our embedder in place, lets define our retriever:
+
+[code]
+def get_multi_vector_retriever(
+    docstore_id_key: str, collection_name: str, embedding_function: Embeddings
+):
+    """Create the composed retriever object."""
+    vectorstore = Chroma(
+        collection_name=collection_name,
+        embedding_function=embedding_function,
+    )
+    store = InMemoryByteStore()
+
+    return MultiVectorRetriever(
+        vectorstore=vectorstore,
+        byte_store=store,
+        id_key=docstore_id_key,
+    )
+
+
+retriever = get_multi_vector_retriever(DOCSTORE_ID_KEY, "multi_vec_store", model_inc)
+
+[markdown]
+Next, we divide each chunk into sub-docs:
+
+[code]
+child_text_splitter = RecursiveCharacterTextSplitter(chunk_size=400)
+id_key = "doc_id"
+doc_ids = [str(uuid.uuid4()) for _ in all_splits]
+
+[code]
+sub_docs = []
+for i, doc in enumerate(all_splits):
+    _id = doc_ids[i]
+    _sub_docs = child_text_splitter.split_documents([doc])
+    for _doc in _sub_docs:
+        _doc.metadata[id_key] = _id
+    sub_docs.extend(_sub_docs)
+
+[markdown]
+Lets write our documents into our new store. This will use our embedder on each document.
+
+[code]
+retriever.vectorstore.add_documents(sub_docs)
+retriever.docstore.mset(list(zip(doc_ids, all_splits)))
+
+[output]
+Batches: 100%|██████████| 8/8 [00:00<00:00,  9.05it/s]
+
+
+[markdown]
+Great! Our retriever is good to go. Lets load up an LLM, that will reason over the retrieved documents:
+
+[code]
+import torch
+from langchain_huggingface.llms import HuggingFacePipeline
+from optimum.intel.ipex import IPEXModelForCausalLM
+from transformers import AutoTokenizer, pipeline
+
+model_id = "Intel/neural-chat-7b-v3-3"
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+model = IPEXModelForCausalLM.from_pretrained(
+    model_id, torch_dtype=torch.bfloat16, export=True
+)
+
+pipe = pipeline("text-generation", model=model, tokenizer=tokenizer, max_new_tokens=100)
+
+hf = HuggingFacePipeline(pipeline=pipe)
+
+[output]
+
+Loading checkpoint shards:   0%|          | 0/2 [00:00<?, ?it/s]
+
+[markdown]
+Next, we will load up a prompt for answering questions using retrieved documents:
+
+[code]
+from langchain import hub
+
+prompt = hub.pull("rlm/rag-prompt")
+
+[markdown]
+We can now build our pipeline:
+
+[code]
+from langchain.schema.runnable import RunnablePassthrough
+
+rag_chain = {"context": retriever, "question": RunnablePassthrough()} | prompt | hf
+
+[markdown]
+Excellent! lets ask it a question.
+We will also use a verbose and debug, to check which documents were used by the model to produce the answer.
+
+[code]
+langchain.verbose = True
+langchain.debug = True
+
+llm_res = rag_chain.invoke(
+    "What is the first transduction model relying entirely on self-attention?",
+)
+
+[output]
+Setting `pad_token_id` to `eos_token_id`:2 for open-end generation.
+
+[32;1m[1;3m[chain/start][0m [1m[1:chain:RunnableSequence] Entering Chain run with input:
+[0m{
+  "input": "What is the first transduction model relying entirely on self-attention?"
+}
+[32;1m[1;3m[chain/start][0m [1m[1:chain:RunnableSequence > 2:chain:RunnableParallel<context,question>] Entering Chain run with input:
+[0m{
+  "input": "What is the first transduction model relying entirely on self-attention?"
+}
+[32;1m[1;3m[chain/start][0m [1m[1:chain:RunnableSequence > 2:chain:RunnableParallel<context,question> > 4:chain:RunnablePassthrough] Entering Chain run with input:
+[0m{
+  "input": "What is the first transduction model relying entirely on self-attention?"
+}
+[36;1m[1;3m[chain/end][0m [1m[1:chain:RunnableSequence > 2:chain:RunnableParallel<context,question> > 4:chain:RunnablePassthrough] [1ms] Exiting Chain run with output:
+[0m{
+  "output": "What is the first transduction model relying entirely on self-attention?"
+}
+[36;1m[1;3m[chain/end][0m [1m[1:chain:RunnableSequence > 2:chain:RunnableParallel<context,question>] [66ms] Exiting Chain run with output:
+[0m[outputs]
+[32;1m[1;3m[chain/start][0m [1m[1:chain:RunnableSequence > 5:prompt:ChatPromptTemplate] Entering Prompt run with input:
+[0m[inputs]
+[36;1m[1;3m[chain/end][0m [1m[1:chain:RunnableSequence > 5:prompt:ChatPromptTemplate] [1ms] Exiting Prompt run with output:
+[0m{
+  "lc": 1,
+  "type": "constructor",
+  "id": [
+    "langchain",
+    "prompts",
+    "chat",
+    "ChatPromptValue"
+  ],
+  "kwargs": {
+    "messages": [
+      {
+        "lc": 1,
+        "type": "constructor",
+        "id": [
+          "langchain",
+          "schema",
+          "messages",
+          "HumanMessage"
+        ],
+        "kwargs": {
+          "content": "You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.\nQuestion: What is the first transduction model relying entirely on self-attention? \nContext: [Document(page_content='To the best of our knowledge, however, the Transformer is the first transduction model relying entirely on self-attention to compute representations of its input and output without using sequence-aligned RNNs or convolution.\\nIn the following sections, we will describe the Transformer, motivate self-attention and discuss its advantages over models such as (neural_gpu, ; NalBytenet2017, ) and (JonasFaceNet2017, ).\\n\\n\\n\\n\\n3 Model Architecture\\n\\nFigure 1: The Transformer - model architecture.', metadata={'source': 'https://ar5iv.labs.arxiv.org/html/1706.03762', 'title': '[1706.03762] Attention Is All You Need', 'language': 'en'}), Document(page_content='In this work, we presented the Transformer, the first sequence transduction model based entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention.\\n\\n\\nFor translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers. On both WMT 2014 English-to-German and WMT 2014 English-to-French translation tasks, we achieve a new state of the art. In the former task our best model outperforms even all previously reported ensembles. \\n\\n\\nWe are excited about the future of attention-based models and plan to apply them to other tasks. We plan to extend the Transformer to problems involving input and output modalities other than text and to investigate local, restricted attention mechanisms to efficiently handle large inputs and outputs such as images, audio and video.\\nMaking generation less sequential is another research goals of ours.', metadata={'source': 'https://ar5iv.labs.arxiv.org/html/1706.03762', 'title': '[1706.03762] Attention Is All You Need', 'language': 'en'}), Document(page_content='Attention mechanisms have become an integral part of compelling sequence modeling and transduction models in various tasks, allowing modeling of dependencies without regard to their distance in the input or output sequences (bahdanau2014neural, ; structuredAttentionNetworks, ). In all but a few cases (decomposableAttnModel, ), however, such attention mechanisms are used in conjunction with a recurrent network.\\n\\n\\nIn this work we propose the Transformer, a model architecture eschewing recurrence and instead relying entirely on an attention mechanism to draw global dependencies between input and output. The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs.\\n\\n\\n\\n\\n\\n2 Background', metadata={'source': 'https://ar5iv.labs.arxiv.org/html/1706.03762', 'title': '[1706.03762] Attention Is All You Need', 'language': 'en'}), Document(page_content='The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the', metadata={'source': 'https://ar5iv.labs.arxiv.org/html/1706.03762', 'title': '[1706.03762] Attention Is All You Need', 'language': 'en'})] \nAnswer:",
+          "additional_kwargs": {}
+        }
+      }
+    ]
+  }
+}
+[32;1m[1;3m[llm/start][0m [1m[1:chain:RunnableSequence > 6:llm:HuggingFacePipeline] Entering LLM run with input:
+[0m{
+  "prompts": [
+    "Human: You are an assistant for question-answering tasks. Use the following pieces of retrieved context to answer the question. If you don't know the answer, just say that you don't know. Use three sentences maximum and keep the answer concise.\nQuestion: What is the first transduction model relying entirely on self-attention? \nContext: [Document(page_content='To the best of our knowledge, however, the Transformer is the first transduction model relying entirely on self-attention to compute representations of its input and output without using sequence-aligned RNNs or convolution.\\nIn the following sections, we will describe the Transformer, motivate self-attention and discuss its advantages over models such as (neural_gpu, ; NalBytenet2017, ) and (JonasFaceNet2017, ).\\n\\n\\n\\n\\n3 Model Architecture\\n\\nFigure 1: The Transformer - model architecture.', metadata={'source': 'https://ar5iv.labs.arxiv.org/html/1706.03762', 'title': '[1706.03762] Attention Is All You Need', 'language': 'en'}), Document(page_content='In this work, we presented the Transformer, the first sequence transduction model based entirely on attention, replacing the recurrent layers most commonly used in encoder-decoder architectures with multi-headed self-attention.\\n\\n\\nFor translation tasks, the Transformer can be trained significantly faster than architectures based on recurrent or convolutional layers. On both WMT 2014 English-to-German and WMT 2014 English-to-French translation tasks, we achieve a new state of the art. In the former task our best model outperforms even all previously reported ensembles. \\n\\n\\nWe are excited about the future of attention-based models and plan to apply them to other tasks. We plan to extend the Transformer to problems involving input and output modalities other than text and to investigate local, restricted attention mechanisms to efficiently handle large inputs and outputs such as images, audio and video.\\nMaking generation less sequential is another research goals of ours.', metadata={'source': 'https://ar5iv.labs.arxiv.org/html/1706.03762', 'title': '[1706.03762] Attention Is All You Need', 'language': 'en'}), Document(page_content='Attention mechanisms have become an integral part of compelling sequence modeling and transduction models in various tasks, allowing modeling of dependencies without regard to their distance in the input or output sequences (bahdanau2014neural, ; structuredAttentionNetworks, ). In all but a few cases (decomposableAttnModel, ), however, such attention mechanisms are used in conjunction with a recurrent network.\\n\\n\\nIn this work we propose the Transformer, a model architecture eschewing recurrence and instead relying entirely on an attention mechanism to draw global dependencies between input and output. The Transformer allows for significantly more parallelization and can reach a new state of the art in translation quality after being trained for as little as twelve hours on eight P100 GPUs.\\n\\n\\n\\n\\n\\n2 Background', metadata={'source': 'https://ar5iv.labs.arxiv.org/html/1706.03762', 'title': '[1706.03762] Attention Is All You Need', 'language': 'en'}), Document(page_content='The dominant sequence transduction models are based on complex recurrent or convolutional neural networks that include an encoder and a decoder. The best performing models also connect the encoder and decoder through an attention mechanism. We propose a new simple network architecture, the Transformer, based solely on attention mechanisms, dispensing with recurrence and convolutions entirely. Experiments on two machine translation tasks show these models to be superior in quality while being more parallelizable and requiring significantly less time to train. Our model achieves 28.4 BLEU on the WMT 2014 English-to-German translation task, improving over the existing best results, including ensembles, by over 2 BLEU. On the WMT 2014 English-to-French translation task, our model establishes a new single-model state-of-the-art BLEU score of 41.8 after training for 3.5 days on eight GPUs, a small fraction of the training costs of the best models from the literature. We show that the', metadata={'source': 'https://ar5iv.labs.arxiv.org/html/1706.03762', 'title': '[1706.03762] Attention Is All You Need', 'language': 'en'})] \nAnswer:"
+  ]
+}
+[36;1m[1;3m[llm/end][0m [1m[1:chain:RunnableSequence > 6:llm:HuggingFacePipeline] [4.34s] Exiting LLM run with output:
+[0m{
+  "generations": [
+    [
+      {
+        "text": " The first transduction model relying entirely on self-attention is the Transformer.",
+        "generation_info": null,
+        "type": "Generation"
+      }
+    ]
+  ],
+  "llm_output": null,
+  "run": null
+}
+[36;1m[1;3m[chain/end][0m [1m[1:chain:RunnableSequence] [4.41s] Exiting Chain run with output:
+[0m{
+  "output": " The first transduction model relying entirely on self-attention is the Transformer."
+}
+
+
+[code]
+llm_res
+
+[output]
+' The first transduction model relying entirely on self-attention is the Transformer.'
+
+[markdown]
+Based on the retrieved documents, the answer is indeed correct :)
+

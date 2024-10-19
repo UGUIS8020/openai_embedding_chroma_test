@@ -1,0 +1,14 @@
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, rag_jaguardb_chain, path="/rag-jaguardb")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app = RemoteRunnable("http://localhost:8001/rag-jaguardb")
+rag_app.invoke("hello!")
+

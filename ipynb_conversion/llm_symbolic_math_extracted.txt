@@ -1,0 +1,49 @@
+[markdown]
+# LLM Symbolic Math 
+This notebook showcases using LLMs and Python to Solve Algebraic Equations. Under the hood is makes use of [SymPy](https://www.sympy.org/en/index.html).
+
+[code]
+from langchain_experimental.llm_symbolic_math.base import LLMSymbolicMathChain
+from langchain_openai import OpenAI
+
+llm = OpenAI(temperature=0)
+llm_symbolic_math = LLMSymbolicMathChain.from_llm(llm)
+
+[markdown]
+## Integrals and derivates
+
+[code]
+llm_symbolic_math.invoke("What is the derivative of sin(x)*exp(x) with respect to x?")
+
+[output]
+'Answer: exp(x)*sin(x) + exp(x)*cos(x)'
+
+[code]
+llm_symbolic_math.invoke(
+    "What is the integral of exp(x)*sin(x) + exp(x)*cos(x) with respect to x?"
+)
+
+[output]
+'Answer: exp(x)*sin(x)'
+
+[markdown]
+## Solve linear and differential equations
+
+[code]
+llm_symbolic_math.invoke('Solve the differential equation y" - y = e^t')
+
+[output]
+'Answer: Eq(y(t), C2*exp(-t) + (C1 + t/2)*exp(t))'
+
+[code]
+llm_symbolic_math.invoke("What are the solutions to this equation y^3 + 1/3y?")
+
+[output]
+'Answer: {0, -sqrt(3)*I/3, sqrt(3)*I/3}'
+
+[code]
+llm_symbolic_math.invoke("x = y + 5, y = z - 3, z = x * y. Solve for x, y, z")
+
+[output]
+'Answer: (3 - sqrt(7), -sqrt(7) - 2, 1 - sqrt(7)), (sqrt(7) + 3, -2 + sqrt(7), 1 + sqrt(7))'
+

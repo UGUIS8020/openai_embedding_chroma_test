@@ -1,0 +1,125 @@
+[code]
+from langchain_anthropic import ChatAnthropic
+from langchain_core.runnables import ConfigurableField
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI
+
+
+@tool
+def multiply(x: float, y: float) -> float:
+    """Multiply 'x' times 'y'."""
+    return x * y
+
+
+@tool
+def exponentiate(x: float, y: float) -> float:
+    """Raise 'x' to the 'y'."""
+    return x**y
+
+
+@tool
+def add(x: float, y: float) -> float:
+    """Add 'x' and 'y'."""
+    return x + y
+
+
+tools = [multiply, exponentiate, add]
+
+gpt35 = ChatOpenAI(model="gpt-3.5-turbo-0125", temperature=0).bind_tools(tools)
+claude3 = ChatAnthropic(model="claude-3-sonnet-20240229").bind_tools(tools)
+llm_with_tools = gpt35.configurable_alternatives(
+    ConfigurableField(id="llm"), default_key="gpt35", claude3=claude3
+)
+
+[markdown]
+# LangGraph
+
+[code]
+import operator
+from typing import Annotated, Sequence, TypedDict
+
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
+from langchain_core.runnables import RunnableLambda
+from langgraph.graph import END, StateGraph
+
+
+class AgentState(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], operator.add]
+
+
+def should_continue(state):
+    return "continue" if state["messages"][-1].tool_calls else "end"
+
+
+def call_model(state, config):
+    return {"messages": [llm_with_tools.invoke(state["messages"], config=config)]}
+
+
+def _invoke_tool(tool_call):
+    tool = {tool.name: tool for tool in tools}[tool_call["name"]]
+    return ToolMessage(tool.invoke(tool_call["args"]), tool_call_id=tool_call["id"])
+
+
+tool_executor = RunnableLambda(_invoke_tool)
+
+
+def call_tools(state):
+    last_message = state["messages"][-1]
+    return {"messages": tool_executor.batch(last_message.tool_calls)}
+
+
+workflow = StateGraph(AgentState)
+workflow.add_node("agent", call_model)
+workflow.add_node("action", call_tools)
+workflow.set_entry_point("agent")
+workflow.add_conditional_edges(
+    "agent",
+    should_continue,
+    {
+        "continue": "action",
+        "end": END,
+    },
+)
+workflow.add_edge("action", "agent")
+graph = workflow.compile()
+
+[code]
+graph.invoke(
+    {
+        "messages": [
+            HumanMessage(
+                "what's 3 plus 5 raised to the 2.743. also what's 17.24 - 918.1241"
+            )
+        ]
+    }
+)
+
+[output]
+{'messages': [HumanMessage(content="what's 3 plus 5 raised to the 2.743. also what's 17.24 - 918.1241"),
+  AIMessage(content='', additional_kwargs={'tool_calls': [{'id': 'call_6yMU2WsS4Bqgi1WxFHxtfJRc', 'function': {'arguments': '{"x": 8, "y": 2.743}', 'name': 'exponentiate'}, 'type': 'function'}, {'id': 'call_GAL3dQiKFF9XEV0RrRLPTvVp', 'function': {'arguments': '{"x": 17.24, "y": -918.1241}', 'name': 'add'}, 'type': 'function'}]}, response_metadata={'token_usage': {'completion_tokens': 58, 'prompt_tokens': 168, 'total_tokens': 226}, 'model_name': 'gpt-3.5-turbo-0125', 'system_fingerprint': 'fp_b28b39ffa8', 'finish_reason': 'tool_calls', 'logprobs': None}, id='run-528302fc-7acf-4c11-82c4-119ccf40c573-0', tool_calls=[{'name': 'exponentiate', 'args': {'x': 8, 'y': 2.743}, 'id': 'call_6yMU2WsS4Bqgi1WxFHxtfJRc'}, {'name': 'add', 'args': {'x': 17.24, 'y': -918.1241}, 'id': 'call_GAL3dQiKFF9XEV0RrRLPTvVp'}]),
+  ToolMessage(content='300.03770462067547', tool_call_id='call_6yMU2WsS4Bqgi1WxFHxtfJRc'),
+  ToolMessage(content='-900.8841', tool_call_id='call_GAL3dQiKFF9XEV0RrRLPTvVp'),
+  AIMessage(content='The result of \\(3 + 5^{2.743}\\) is approximately 300.04, and the result of \\(17.24 - 918.1241\\) is approximately -900.88.', response_metadata={'token_usage': {'completion_tokens': 44, 'prompt_tokens': 251, 'total_tokens': 295}, 'model_name': 'gpt-3.5-turbo-0125', 'system_fingerprint': 'fp_b28b39ffa8', 'finish_reason': 'stop', 'logprobs': None}, id='run-d1161669-ed09-4b18-94bd-6d8530df5aa8-0')]}
+
+[code]
+graph.invoke(
+    {
+        "messages": [
+            HumanMessage(
+                "what's 3 plus 5 raised to the 2.743. also what's 17.24 - 918.1241"
+            )
+        ]
+    },
+    config={"configurable": {"llm": "claude3"}},
+)
+
+[output]
+{'messages': [HumanMessage(content="what's 3 plus 5 raised to the 2.743. also what's 17.24 - 918.1241"),
+  AIMessage(content=[{'text': "Okay, let's break this down into two parts:", 'type': 'text'}, {'id': 'toolu_01DEhqcXkXTtzJAiZ7uMBeDC', 'input': {'x': 3, 'y': 5}, 'name': 'add', 'type': 'tool_use'}], response_metadata={'id': 'msg_01AkLGH8sxMHaH15yewmjwkF', 'model': 'claude-3-sonnet-20240229', 'stop_reason': 'tool_use', 'stop_sequence': None, 'usage': {'input_tokens': 450, 'output_tokens': 81}}, id='run-f35bfae8-8ded-4f8a-831b-0940d6ad16b6-0', tool_calls=[{'name': 'add', 'args': {'x': 3, 'y': 5}, 'id': 'toolu_01DEhqcXkXTtzJAiZ7uMBeDC'}]),
+  ToolMessage(content='8.0', tool_call_id='toolu_01DEhqcXkXTtzJAiZ7uMBeDC'),
+  AIMessage(content=[{'id': 'toolu_013DyMLrvnrto33peAKMGMr1', 'input': {'x': 8.0, 'y': 2.743}, 'name': 'exponentiate', 'type': 'tool_use'}], response_metadata={'id': 'msg_015Fmp8aztwYcce2JDAFfce3', 'model': 'claude-3-sonnet-20240229', 'stop_reason': 'tool_use', 'stop_sequence': None, 'usage': {'input_tokens': 545, 'output_tokens': 75}}, id='run-48aaeeeb-a1e5-48fd-a57a-6c3da2907b47-0', tool_calls=[{'name': 'exponentiate', 'args': {'x': 8.0, 'y': 2.743}, 'id': 'toolu_013DyMLrvnrto33peAKMGMr1'}]),
+  ToolMessage(content='300.03770462067547', tool_call_id='toolu_013DyMLrvnrto33peAKMGMr1'),
+  AIMessage(content=[{'text': 'So 3 plus 5 raised to the 2.743 power is 300.04.\n\nFor the second part:', 'type': 'text'}, {'id': 'toolu_01UTmMrGTmLpPrPCF1rShN46', 'input': {'x': 17.24, 'y': -918.1241}, 'name': 'add', 'type': 'tool_use'}], response_metadata={'id': 'msg_015TkhfRBENPib2RWAxkieH6', 'model': 'claude-3-sonnet-20240229', 'stop_reason': 'tool_use', 'stop_sequence': None, 'usage': {'input_tokens': 638, 'output_tokens': 105}}, id='run-45fb62e3-d102-4159-881d-241c5dbadeed-0', tool_calls=[{'name': 'add', 'args': {'x': 17.24, 'y': -918.1241}, 'id': 'toolu_01UTmMrGTmLpPrPCF1rShN46'}]),
+  ToolMessage(content='-900.8841', tool_call_id='toolu_01UTmMrGTmLpPrPCF1rShN46'),
+  AIMessage(content='Therefore, 17.24 - 918.1241 = -900.8841', response_metadata={'id': 'msg_01LgKnRuUcSyADCpxv9tPoYD', 'model': 'claude-3-sonnet-20240229', 'stop_reason': 'end_turn', 'stop_sequence': None, 'usage': {'input_tokens': 759, 'output_tokens': 24}}, id='run-1008254e-ccd1-497c-8312-9550dd77bd08-0')]}
+

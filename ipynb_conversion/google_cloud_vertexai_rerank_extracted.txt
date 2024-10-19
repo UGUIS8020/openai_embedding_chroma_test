@@ -1,0 +1,221 @@
+[markdown]
+# Google Cloud Vertex AI Reranker
+
+> The [Vertex Search Ranking API](https://cloud.google.com/generative-ai-app-builder/docs/ranking) is one of the standalone APIs in [Vertex AI Agent Builder](https://cloud.google.com/generative-ai-app-builder/docs/builder-apis). It takes a list of documents and reranks those documents based on how relevant the documents are to a query. Compared to embeddings, which look only at the semantic similarity of a document and a query, the ranking API can give you precise scores for how well a document answers a given query. The ranking API can be used to improve the quality of search results after retrieving an initial set of candidate documents.
+
+>The ranking API is stateless so there's no need to index documents before calling the API. All you need to do is pass in the query and documents. This makes the API well suited for reranking documents from any document retrievers.
+
+>For more information, see [Rank and rerank documents](https://cloud.google.com/generative-ai-app-builder/docs/ranking).
+
+[code]
+%pip install --upgrade --quiet langchain langchain-community langchain-google-community langchain-google-community[vertexaisearch] langchain-google-vertexai langchain-chroma langchain-text-splitters beautifulsoup4
+
+[markdown]
+### Setup
+
+[code]
+PROJECT_ID = ""
+REGION = ""
+RANKING_LOCATION_ID = "global"  # @param {type:"string"}
+
+# Initialize GCP project for Vertex AI
+from google.cloud import aiplatform
+
+aiplatform.init(project=PROJECT_ID, location=REGION)
+
+[markdown]
+### Load and Prepare data
+
+For this example, we will be using the [Google Wiki page](https://en.wikipedia.org/wiki/Google)to demonstrate how the Vertex Ranking API works.
+
+We use a standard pipeline of `load -> split -> embed data`.
+
+The embeddings are created using the [Vertex Embeddings API](https://cloud.google.com/vertex-ai/generative-ai/docs/embeddings/get-text-embeddings#supported_models) model - `textembedding-gecko@003`
+
+[code]
+from langchain_chroma import Chroma
+from langchain_community.document_loaders import WebBaseLoader
+from langchain_google_vertexai import VertexAIEmbeddings
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+vectordb = None
+
+# Load wiki page
+loader = WebBaseLoader("https://en.wikipedia.org/wiki/Google")
+data = loader.load()
+
+# Split doc into chunks
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=800, chunk_overlap=5)
+splits = text_splitter.split_documents(data)
+
+print(f"Your {len(data)} documents have been split into {len(splits)} chunks")
+
+if vectordb is not None:  # delete existing vectordb if it already exists
+    vectordb.delete_collection()
+
+embedding = VertexAIEmbeddings(model_name="textembedding-gecko@003")
+vectordb = Chroma.from_documents(documents=splits, embedding=embedding)
+
+[output]
+Your 1 documents have been split into 266 chunks
+
+
+[code]
+import pandas as pd
+from langchain.retrievers.contextual_compression import ContextualCompressionRetriever
+from langchain_google_community.vertex_rank import VertexAIRank
+
+# Instantiate the VertexAIReranker with the SDK manager
+reranker = VertexAIRank(
+    project_id=PROJECT_ID,
+    location_id=RANKING_LOCATION_ID,
+    ranking_config="default_ranking_config",
+    title_field="source",
+    top_n=5,
+)
+
+basic_retriever = vectordb.as_retriever(search_kwargs={"k": 5})  # fetch top 5 documents
+
+# Create the ContextualCompressionRetriever with the VertexAIRanker as a Reranker
+retriever_with_reranker = ContextualCompressionRetriever(
+    base_compressor=reranker, base_retriever=basic_retriever
+)
+
+[markdown]
+### Testing out the Vertex Ranking API
+
+Let's query both the `basic_retriever` and `retriever_with_reranker` with the same query and compare the retrieved documents.
+
+The Ranking API takes in the input from the `basic_retriever` and passes it to the Ranking API.
+
+The ranking API is used to improve the quality of the ranking and determine a score that indicates the relevance of each record to the query.
+
+You can see the difference between the Unranked and the Ranked Documents. The Ranking API moves the most semantically relevant documents to the top of the context window of the LLM thus helping it form a better answer with reasoning.
+
+[code]
+import pandas as pd
+
+# Use the basic_retriever and the retriever_with_reranker to get relevant documents
+query = "how did the name google originate?"
+retrieved_docs = basic_retriever.invoke(query)
+reranked_docs = retriever_with_reranker.invoke(query)
+
+# Create two lists of results for unranked and ranked docs
+unranked_docs_content = [docs.page_content for docs in retrieved_docs]
+ranked_docs_content = [docs.page_content for docs in reranked_docs]
+
+# Create a comparison DataFrame using the padded lists
+comparison_df = pd.DataFrame(
+    {
+        "Unranked Documents": unranked_docs_content,
+        "Ranked Documents": ranked_docs_content,
+    }
+)
+
+comparison_df
+
+[output]
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            Unranked Documents  \
+0                                                                      ^ a b Brin, Sergey; Page, Lawrence (1998). "The anatomy of a large-scale hypertextual Web search engine" (PDF). Computer Networks and ISDN Systems. 30 (1–7): 107–117. CiteSeerX 10.1.1.115.5930. doi:10.1016/S0169-7552(98)00110-X. ISSN 0169-7552. S2CID 7587743. Archived (PDF) from the original on September 27, 2015. Retrieved April 7, 2019.\n\n^ "About: RankDex". Archived from the original on January 20, 2012. Retrieved September 29, 2010., RankDex\n\n^ "Method for node ranking in a linked database". Google Patents. Archived from the original on October 15, 2015. Retrieved October 19, 2015.\n\n^ Koller, David (January 2004). "Origin of the name "Google"". Stanford University. Archived from the original on June 27, 2012.   
+1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              Eventually, they changed the name to Google; the name of the search engine was a misspelling of the word googol,[21][36][37] a very large number written 10100 (1 followed by 100 zeros), picked to signify that the search engine was intended to provide large quantities of information.[38]   
+2  The name "Google" originated from a misspelling of "googol",[211][212] which refers to the number represented by a 1 followed by one-hundred zeros. Page and Brin write in their original paper on PageRank:[33] "We chose our system name, Google, because it is a common spelling of googol, or 10100[,] and fits well with our goal of building very large-scale search engines." Having found its way increasingly into everyday language, the verb "google" was added to the Merriam Webster Collegiate Dictionary and the Oxford English Dictionary in 2006, meaning "to use the Google search engine to obtain information on the Internet."[213][214] Google's mission statement, from the outset, was "to organize the world's information and make it universally accessible and useful",[215] and its unofficial   
+3                                                              ^ Meijer, Bart (January 3, 2019). "Google shifted $23 billion to tax haven Bermuda in 2017: filing". Reuters. Archived from the original on January 3, 2019. Retrieved January 3, 2019. Google moved 19.9 billion euros ($22.7 billion) through a Dutch shell company to Bermuda in 2017, as part of an arrangement that allows it to reduce its foreign tax bill\n\n^ Hamburger, Tom; Gold, Matea (April 13, 2014). "Google, once disdainful of lobbying, now a master of Washington influence". The Washington Post. Archived from the original on October 27, 2017. Retrieved August 22, 2017.\n\n^ Koller, David (January 2004). "Origin of the name, "Google."". Stanford University. Archived from the original on June 27, 2012. Retrieved May 28, 2006.   
+4                                                                                                                 ^ Swant, Marty. "The World's Valuable Brands". Forbes. Archived from the original on October 18, 2020. Retrieved January 19, 2022.\n\n^ "Best Global Brands". Interbrand. Archived from the original on February 1, 2022. Retrieved March 7, 2011.\n\n^ a b c d "How we started and where we are today – Google". about.google. Archived from the original on April 22, 2020. Retrieved April 24, 2021.\n\n^ Brezina, Corona (2013). Sergey Brin, Larry Page, Eric Schmidt, and Google (1st ed.). New York: Rosen Publishing Group. p. 18. ISBN 978-1-4488-6911-4. LCCN 2011039480.\n\n^ a b c "Our history in depth". Google Company. Archived from the original on April 1, 2012. Retrieved July 15, 2017.   
+
+                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              Ranked Documents  
+0  The name "Google" originated from a misspelling of "googol",[211][212] which refers to the number represented by a 1 followed by one-hundred zeros. Page and Brin write in their original paper on PageRank:[33] "We chose our system name, Google, because it is a common spelling of googol, or 10100[,] and fits well with our goal of building very large-scale search engines." Having found its way increasingly into everyday language, the verb "google" was added to the Merriam Webster Collegiate Dictionary and the Oxford English Dictionary in 2006, meaning "to use the Google search engine to obtain information on the Internet."[213][214] Google's mission statement, from the outset, was "to organize the world's information and make it universally accessible and useful",[215] and its unofficial  
+1                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              Eventually, they changed the name to Google; the name of the search engine was a misspelling of the word googol,[21][36][37] a very large number written 10100 (1 followed by 100 zeros), picked to signify that the search engine was intended to provide large quantities of information.[38]  
+2                                                              ^ Meijer, Bart (January 3, 2019). "Google shifted $23 billion to tax haven Bermuda in 2017: filing". Reuters. Archived from the original on January 3, 2019. Retrieved January 3, 2019. Google moved 19.9 billion euros ($22.7 billion) through a Dutch shell company to Bermuda in 2017, as part of an arrangement that allows it to reduce its foreign tax bill\n\n^ Hamburger, Tom; Gold, Matea (April 13, 2014). "Google, once disdainful of lobbying, now a master of Washington influence". The Washington Post. Archived from the original on October 27, 2017. Retrieved August 22, 2017.\n\n^ Koller, David (January 2004). "Origin of the name, "Google."". Stanford University. Archived from the original on June 27, 2012. Retrieved May 28, 2006.  
+3                                                                      ^ a b Brin, Sergey; Page, Lawrence (1998). "The anatomy of a large-scale hypertextual Web search engine" (PDF). Computer Networks and ISDN Systems. 30 (1–7): 107–117. CiteSeerX 10.1.1.115.5930. doi:10.1016/S0169-7552(98)00110-X. ISSN 0169-7552. S2CID 7587743. Archived (PDF) from the original on September 27, 2015. Retrieved April 7, 2019.\n\n^ "About: RankDex". Archived from the original on January 20, 2012. Retrieved September 29, 2010., RankDex\n\n^ "Method for node ranking in a linked database". Google Patents. Archived from the original on October 15, 2015. Retrieved October 19, 2015.\n\n^ Koller, David (January 2004). "Origin of the name "Google"". Stanford University. Archived from the original on June 27, 2012.  
+4                                                                                                                 ^ Swant, Marty. "The World's Valuable Brands". Forbes. Archived from the original on October 18, 2020. Retrieved January 19, 2022.\n\n^ "Best Global Brands". Interbrand. Archived from the original on February 1, 2022. Retrieved March 7, 2011.\n\n^ a b c d "How we started and where we are today – Google". about.google. Archived from the original on April 22, 2020. Retrieved April 24, 2021.\n\n^ Brezina, Corona (2013). Sergey Brin, Larry Page, Eric Schmidt, and Google (1st ed.). New York: Rosen Publishing Group. p. 18. ISBN 978-1-4488-6911-4. LCCN 2011039480.\n\n^ a b c "Our history in depth". Google Company. Archived from the original on April 1, 2012. Retrieved July 15, 2017.  
+
+[markdown]
+Let's inspect a couple of reranked documents. We observe that the retriever still returns the relevant Langchain type [documents](https://python.langchain.com/api_reference/core/documents/langchain_core.documents.base.Document.html) but as part of the metadata field, we also recieve the `relevance_score` from the Ranking API.
+
+[code]
+for i in range(2):
+    print(f"Document {i}")
+    print(reranked_docs[i])
+    print("----------------------------------------------------------\n")
+
+[output]
+<IPython.core.display.HTML object>
+Document 0
+page_content='The name "Google" originated from a misspelling of "googol",[211][212] which refers to the number represented by a 1 followed by one-hundred zeros. Page and Brin write in their original paper on PageRank:[33] "We chose our system name, Google, because it is a common spelling of googol, or 10100[,] and fits well with our goal of building very large-scale search engines." Having found its way increasingly into everyday language, the verb "google" was added to the Merriam Webster Collegiate Dictionary and the Oxford English Dictionary in 2006, meaning "to use the Google search engine to obtain information on the Internet."[213][214] Google\'s mission statement, from the outset, was "to organize the world\'s information and make it universally accessible and useful",[215] and its unofficial' metadata={'id': '2', 'relevance_score': 0.9800000190734863, 'source': 'https://en.wikipedia.org/wiki/Google'}
+----------------------------------------------------------
+
+Document 1
+page_content='Eventually, they changed the name to Google; the name of the search engine was a misspelling of the word googol,[21][36][37] a very large number written 10100 (1 followed by 100 zeros), picked to signify that the search engine was intended to provide large quantities of information.[38]' metadata={'id': '1', 'relevance_score': 0.75, 'source': 'https://en.wikipedia.org/wiki/Google'}
+----------------------------------------------------------
+
+
+
+[markdown]
+### Putting it all together
+
+This shows an example of a complete RAG chain with a simple prompt template on how you can perform reranking using the Vertex Ranking API.
+
+
+
+[code]
+from langchain.chains import LLMChain
+from langchain_core.documents import Document
+from langchain_core.prompts import PromptTemplate
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+from langchain_google_vertexai import VertexAI
+
+llm = VertexAI(model_name="gemini-1.0-pro-002")
+
+# Instantiate the VertexAIReranker with the SDK manager
+reranker = VertexAIRank(
+    project_id=PROJECT_ID,
+    location_id=RANKING_LOCATION_ID,
+    ranking_config="default_ranking_config",
+    title_field="source",  # metadata field key from your existing documents
+    top_n=5,
+)
+
+# value of k can be set to a higher value as well for tweaking performance
+# eg: # of docs: basic_retriever(100) -> reranker(5)
+basic_retriever = vectordb.as_retriever(search_kwargs={"k": 5})  # fetch top 5 documents
+
+# Create the ContextualCompressionRetriever with the VertexAIRanker as a Reranker
+retriever_with_reranker = ContextualCompressionRetriever(
+    base_compressor=reranker, base_retriever=basic_retriever
+)
+
+template = """
+<context>
+{context}
+</context>
+
+Question:
+{query}
+
+Don't give information outside the context or repeat your findings.
+Answer:
+"""
+prompt = PromptTemplate.from_template(template)
+
+reranker_setup_and_retrieval = RunnableParallel(
+    {"context": retriever_with_reranker, "query": RunnablePassthrough()}
+)
+
+chain = reranker_setup_and_retrieval | prompt | llm
+
+[output]
+<IPython.core.display.HTML object>
+
+[code]
+query = "how did the name google originate?"
+
+[output]
+<IPython.core.display.HTML object>
+
+[code]
+chain.invoke(query)
+
+[output]
+<IPython.core.display.HTML object>
+'The name "Google" originated as a misspelling of the word "googol," a mathematical term for the number 1 followed by 100 zeros. Larry Page and Sergey Brin, the founders of Google, chose the name because it reflected their goal of building a search engine that could handle massive amounts of information. \n'
+

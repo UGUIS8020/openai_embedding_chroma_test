@@ -1,0 +1,21 @@
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain, path="/sql_llamacpp")
+```
+
+This template includes an example DB of 2023 NBA rosters.
+
+We can  ask questions related to NBA players. 
+
+[code]
+from langserve.client import RemoteRunnable
+
+sql_app = RemoteRunnable("http://0.0.0.0:8001/sql_llamacpp")
+sql_app.invoke({"question": "What team is Klay Thompson on?"})
+
+[output]
+'\nNatural Language Response: Klay Thompson plays for the Golden State Warriors.'
+

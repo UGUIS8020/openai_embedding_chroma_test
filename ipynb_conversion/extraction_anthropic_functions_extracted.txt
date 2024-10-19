@@ -1,0 +1,27 @@
+[markdown]
+## Document Loading
+
+Load a blog post on agents.
+
+[code]
+from langchain_community.document_loaders import WebBaseLoader
+
+loader = WebBaseLoader("https://lilianweng.github.io/posts/2023-06-23-agent/")
+text = loader.load()
+
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain_ext, path="/extraction-anthropic-functions")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+anthropic_function_model = RemoteRunnable(
+    "http://localhost:8001/extraction-anthropic-functions"
+)
+anthropic_function_model.invoke(text[0].page_content[0:1500])
+

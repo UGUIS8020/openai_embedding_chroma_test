@@ -1,0 +1,17 @@
+[markdown]
+## Connect to template
+
+In `server.py`, set -
+```
+add_routes(app, chain_ext, path="/rag_pinecone_multi_query")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app_pinecone = RemoteRunnable("http://0.0.0.0:8001/rag_pinecone_multi_query")
+rag_app_pinecone.invoke("What are the different types of agent memory")
+
+[output]
+'The different types of agent memory mentioned in the context are short-term memory, long-term memory, explicit/declarative memory, and implicit/procedural memory.'
+

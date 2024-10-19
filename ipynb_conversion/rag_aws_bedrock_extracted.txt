@@ -1,0 +1,14 @@
+[markdown]
+## Connect to template
+
+In `server.py`, set -
+```
+add_routes(app, chain_ext, path="/rag_aws_bedrock")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app_pinecone = RemoteRunnable("http://0.0.0.0:8001/rag_aws_bedrock")
+rag_app_pinecone.invoke("What are the different types of agent memory")
+

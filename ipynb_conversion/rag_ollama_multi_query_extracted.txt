@@ -1,0 +1,17 @@
+[markdown]
+## Connect to template
+
+In `server.py`, set -
+```
+add_routes(app, chain_ext, path="/rag_ollama_multi_query")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app_ollama = RemoteRunnable("http://0.0.0.0:8001/rag_ollama_multi_query")
+rag_app_ollama.invoke("What are the different types of agent memory?")
+
+[output]
+'The various types of agent memory mentioned in the context are:\n\n1. Explicit / declarative memory: This refers to memory of facts and events, including episodic memory (events and experiences) and semantic memory (facts and concepts).\n\n2. Implicit / procedural memory: This type of memory is unconscious and involves skills and routines that are performed automatically, like riding a bike or typing on a keyboard.\n\n3. Short-term memory: This is the in-context learning utilized by the model to learn.\n\n4. Long-term memory: This provides the agent with the capability to retain and recall information over extended periods, often by leveraging an external vector store and fast retrieval.\n\n5. Sensory memory: This is the earliest stage of memory that retains impressions of sensory information (visual, auditory, etc) after the original stimuli have ended. It includes subcategories like iconic memory (visual), echoic memory (auditory), and haptic memory (touch).'
+

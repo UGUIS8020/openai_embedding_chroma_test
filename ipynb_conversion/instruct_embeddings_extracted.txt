@@ -1,0 +1,29 @@
+[markdown]
+# Instruct Embeddings on Hugging Face
+
+>[Hugging Face sentence-transformers](https://huggingface.co/sentence-transformers) is a Python framework for state-of-the-art sentence, text and image embeddings.
+>One of the instruct embedding models is used in the `HuggingFaceInstructEmbeddings` class.
+
+
+[code]
+from langchain_community.embeddings import HuggingFaceInstructEmbeddings
+
+[code]
+embeddings = HuggingFaceInstructEmbeddings(
+    query_instruction="Represent the query for retrieval: "
+)
+
+[output]
+load INSTRUCTOR_Transformer
+max_seq_length  512
+
+
+[code]
+text = "This is a test document."
+
+[code]
+query_result = embeddings.embed_query(text)
+
+[code]
+
+

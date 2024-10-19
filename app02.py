@@ -86,7 +86,7 @@ def process_file(file_path):
         return None, None
 
 def main():
-    data_directory = "./data/渋谷歯科技工所"
+    data_directory = "./data/lang"
     
     if not os.path.exists(data_directory):
         print(f"ディレクトリが存在しません: {data_directory}")

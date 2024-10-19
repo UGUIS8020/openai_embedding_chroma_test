@@ -1,0 +1,46 @@
+[markdown]
+# Fake LLM
+LangChain provides a fake LLM class that can be used for testing. This allows you to mock out calls to the LLM and simulate what would happen if the LLM responded in a certain way.
+
+In this notebook we go over how to use this.
+
+We start this with using the FakeLLM in an agent.
+
+[code]
+from langchain_community.llms.fake import FakeListLLM
+
+[code]
+from langchain.agents import AgentType, initialize_agent, load_tools
+
+[code]
+tools = load_tools(["python_repl"])
+
+[code]
+responses = ["Action: Python REPL\nAction Input: print(2 + 2)", "Final Answer: 4"]
+llm = FakeListLLM(responses=responses)
+
+[code]
+agent = initialize_agent(
+    tools, llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True
+)
+
+[code]
+agent.invoke("whats 2 + 2")
+
+[output]
+
+
+[1m> Entering new AgentExecutor chain...[0m
+[32;1m[1;3mAction: Python REPL
+Action Input: print(2 + 2)[0m
+Observation: [36;1m[1;3m4
+[0m
+Thought:[32;1m[1;3mFinal Answer: 4[0m
+
+[1m> Finished chain.[0m
+
+'4'
+
+[code]
+
+

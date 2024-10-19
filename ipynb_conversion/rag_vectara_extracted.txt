@@ -1,0 +1,14 @@
+[markdown]
+# Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain_ext, path="/rag-vectara")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app_vectara = RemoteRunnable("http://localhost:8000/rag-vectara")
+rag_app_vectara.invoke("How does agent memory work?")
+

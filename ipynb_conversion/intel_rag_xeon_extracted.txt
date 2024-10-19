@@ -1,0 +1,18 @@
+[markdown]
+## Connect to RAG App
+
+Assuming you are already running this server:
+```bash
+langserve start
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+gaudi_rag = RemoteRunnable("http://localhost:8000/intel-rag-xeon")
+
+print(gaudi_rag.invoke("What was Nike's revenue in 2023?"))
+
+[code]
+print(gaudi_rag.invoke("How many employees work at Nike?"))
+

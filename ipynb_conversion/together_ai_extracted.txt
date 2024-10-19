@@ -1,0 +1,85 @@
+[markdown]
+## Together AI + RAG
+ 
+[Together AI](https://python.langchain.com/docs/integrations/llms/together) has a broad set of OSS LLMs via inference API.
+
+See [here](https://docs.together.ai/docs/inference-models). We use `"mistralai/Mixtral-8x7B-Instruct-v0.1` for RAG on the Mixtral paper.
+
+Download the paper:
+https://arxiv.org/pdf/2401.04088.pdf
+
+[code]
+! pip install --quiet pypdf tiktoken openai langchain-chroma langchain-together
+
+[code]
+# Load
+from langchain_community.document_loaders import PyPDFLoader
+
+loader = PyPDFLoader("~/Desktop/mixtral.pdf")
+data = loader.load()
+
+# Split
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=0)
+all_splits = text_splitter.split_documents(data)
+
+# Add to vectorDB
+from langchain_chroma import Chroma
+from langchain_community.embeddings import OpenAIEmbeddings
+
+"""
+from langchain_together.embeddings import TogetherEmbeddings
+embeddings = TogetherEmbeddings(model="togethercomputer/m2-bert-80M-8k-retrieval")
+"""
+vectorstore = Chroma.from_documents(
+    documents=all_splits,
+    collection_name="rag-chroma",
+    embedding=OpenAIEmbeddings(),
+)
+
+retriever = vectorstore.as_retriever()
+
+[code]
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.pydantic_v1 import BaseModel
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough
+
+# RAG prompt
+template = """Answer the question based only on the following context:
+{context}
+
+Question: {question}
+"""
+prompt = ChatPromptTemplate.from_template(template)
+
+# LLM
+from langchain_together import Together
+
+llm = Together(
+    model="mistralai/Mixtral-8x7B-Instruct-v0.1",
+    temperature=0.0,
+    max_tokens=2000,
+    top_k=1,
+)
+
+# RAG chain
+chain = (
+    RunnableParallel({"context": retriever, "question": RunnablePassthrough()})
+    | prompt
+    | llm
+    | StrOutputParser()
+)
+
+[code]
+chain.invoke("What are the Architectural details of Mixtral?")
+
+[output]
+'\nAnswer: The architectural details of Mixtral are as follows:\n- Dimension (dim): 4096\n- Number of layers (n\\_layers): 32\n- Dimension of each head (head\\_dim): 128\n- Hidden dimension (hidden\\_dim): 14336\n- Number of heads (n\\_heads): 32\n- Number of kv heads (n\\_kv\\_heads): 8\n- Context length (context\\_len): 32768\n- Vocabulary size (vocab\\_size): 32000\n- Number of experts (num\\_experts): 8\n- Number of top k experts (top\\_k\\_experts): 2\n\nMixtral is based on a transformer architecture and uses the same modifications as described in [18], with the notable exceptions that Mixtral supports a fully dense context length of 32k tokens, and the feedforward block picks from a set of 8 distinct groups of parameters. At every layer, for every token, a router network chooses two of these groups (the “experts”) to process the token and combine their output additively. This technique increases the number of parameters of a model while controlling cost and latency, as the model only uses a fraction of the total set of parameters per token. Mixtral is pretrained with multilingual data using a context size of 32k tokens. It either matches or exceeds the performance of Llama 2 70B and GPT-3.5, over several benchmarks. In particular, Mixtral vastly outperforms Llama 2 70B on mathematics, code generation, and multilingual benchmarks.'
+
+[markdown]
+Trace: 
+
+https://smith.langchain.com/public/935fd642-06a6-4b42-98e3-6074f93115cd/r
+

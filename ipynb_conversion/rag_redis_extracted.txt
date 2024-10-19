@@ -1,0 +1,31 @@
+[markdown]
+## Connect to RAG App
+
+Assuming you are already running this server:
+```bash
+langserve start
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_redis = RemoteRunnable("http://localhost:8000/rag-redis")
+
+print(rag_redis.invoke("What was Nike's revenue in 2023?"))
+
+[output]
+Nike's revenue in 2023 was $51.2 billion. 
+
+Source: 'data/nke-10k-2023.pdf', Start Index: '146100'
+
+
+[code]
+print(rag_redis.invoke("How many employees work at Nike?"))
+
+[output]
+As of May 31, 2023, Nike had approximately 83,700 employees worldwide. This information can be found in the first piece of context provided. (source: data/nke-10k-2023.pdf, start_index: 32532)
+
+
+[code]
+
+

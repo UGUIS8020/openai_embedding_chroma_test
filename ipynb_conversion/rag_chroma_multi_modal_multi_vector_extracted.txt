@@ -1,0 +1,14 @@
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain_rag_conv, path="/rag-chroma-multi-modal-multi-vector")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app = RemoteRunnable("http://localhost:8001/rag-chroma-multi-modal-multi-vector")
+rag_app.invoke("What is the projected TAM for observability expected for each year through 2026?")
+

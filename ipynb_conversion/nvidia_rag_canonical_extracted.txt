@@ -1,0 +1,14 @@
+[markdown]
+## Connect to template
+
+In `server.py`, set -
+```
+add_routes(app, nvidia_rag_canonical_chain, path="/nvidia_rag_canonical")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app = RemoteRunnable("http://0.0.0.0:8000/nvidia_rag_canonical")
+rag_app.invoke("How many Americans receive Social Security Benefits?")
+

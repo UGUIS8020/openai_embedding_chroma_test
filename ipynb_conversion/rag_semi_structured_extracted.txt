@@ -1,0 +1,14 @@
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain_rag_conv, path="/rag-semi-structured")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app = RemoteRunnable("http://localhost:8001/rag-semi-structured")
+rag_app.invoke("How does agent memory work?")
+

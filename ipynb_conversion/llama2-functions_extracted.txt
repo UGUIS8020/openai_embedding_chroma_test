@@ -1,0 +1,14 @@
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain_ext, path="/llama2_functions")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+llama2_function = RemoteRunnable("http://0.0.0.0:8001/llama2_functions")
+llama2_function.invoke({"question": "How does agent memory work?"})
+

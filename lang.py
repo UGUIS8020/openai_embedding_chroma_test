@@ -10,9 +10,16 @@ from urllib.parse import urljoin
 load_dotenv()
 
 # 出力ディレクトリの設定
-output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lang')
-os.makedirs(output_dir, exist_ok=True)
-print(f"Output directory: {output_dir}")
+base_output_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'lang')
+docs_output_dir = os.path.join(base_output_dir, 'docs')
+github_output_dir = os.path.join(base_output_dir, 'github')
+notebooks_output_dir = os.path.join(base_output_dir, 'notebooks')
+
+os.makedirs(docs_output_dir, exist_ok=True)
+os.makedirs(github_output_dir, exist_ok=True)
+os.makedirs(notebooks_output_dir, exist_ok=True)
+
+print(f"Output directories: \n- Docs: {docs_output_dir}\n- GitHub: {github_output_dir}\n- Notebooks: {notebooks_output_dir}")
 
 # GitHubトークンの取得
 github_token = os.getenv('GITHUB_TOKEN')
@@ -114,7 +121,7 @@ def download_jupyter_notebooks():
             try:
                 print(f"Downloading: {notebook.path}")
                 notebook_content = notebook.decoded_content
-                notebook_path = os.path.join(output_dir, notebook.name)
+                notebook_path = os.path.join(notebooks_output_dir, notebook.name)
                 with open(notebook_path, 'wb') as f:
                     f.write(notebook_content)
                 print(f"Successfully downloaded: {notebook.name}")
@@ -131,7 +138,7 @@ def main():
         print("Scraping LangChain official docs...")
         docs_content = scrape_langchain_docs()
         if docs_content:
-            output_file = os.path.join(output_dir, 'langchain_docs.json')
+            output_file = os.path.join(docs_output_dir, 'langchain_docs.json')
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(docs_content, f, ensure_ascii=False, indent=2)
             print(f"Official docs scraped and saved to: {output_file}")
@@ -142,7 +149,7 @@ def main():
         print("Fetching GitHub content...")
         github_content = get_github_content()
         if github_content:
-            output_file = os.path.join(output_dir, 'langchain_github_content.json')
+            output_file = os.path.join(github_output_dir, 'langchain_github_content.json')
             with open(output_file, 'w', encoding='utf-8') as f:
                 json.dump(github_content, f, ensure_ascii=False, indent=2)
             print(f"GitHub content fetched and saved to: {output_file}")
@@ -156,23 +163,26 @@ def main():
 
         # 最終結果の表示
         print("\nFinal Results:")
-        print(f"Files in output directory '{output_dir}':")
-        for file in os.listdir(output_dir):
-            print(f"- {file}")
+        print(f"Files in output directory '{base_output_dir}':")
+        for folder in [docs_output_dir, github_output_dir, notebooks_output_dir]:
+            print(f"\nContents of {folder}:")
+            for file in os.listdir(folder):
+                print(f"- {file}")
         
         # ファイルの内容サマリーを表示
         print("\nFile Content Summary:")
-        for file in os.listdir(output_dir):
-            file_path = os.path.join(output_dir, file)
-            if file.endswith('.json'):
-                with open(file_path, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    if isinstance(data, list):
-                        print(f"{file}: {len(data)} items")
-                    else:
-                        print(f"{file}: JSON object")
-            elif file.endswith('.ipynb'):
-                print(f"{file}: Jupyter Notebook file")
+        for folder in [docs_output_dir, github_output_dir, notebooks_output_dir]:
+            for file in os.listdir(folder):
+                file_path = os.path.join(folder, file)
+                if file.endswith('.json'):
+                    with open(file_path, 'r', encoding='utf-8') as f:
+                        data = json.load(f)
+                        if isinstance(data, list):
+                            print(f"{file}: {len(data)} items")
+                        else:
+                            print(f"{file}: JSON object")
+                elif file.endswith('.ipynb'):
+                    print(f"{file}: Jupyter Notebook file")
 
     except Exception as e:
         print(f"An error occurred: {str(e)}")

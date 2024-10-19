@@ -1,0 +1,207 @@
+[markdown]
+# ChatSambaStudio
+
+This will help you getting started with SambaStudio [chat models](/docs/concepts/#chat-models). For detailed documentation of all ChatStudio features and configurations head to the [API reference](https://api.python.langchain.com/en/latest/chat_models/langchain_community.chat_models.sambanova.ChatSambaStudio.html).
+
+**[SambaNova](https://sambanova.ai/)'s** [SambaStudio](https://docs.sambanova.ai/sambastudio/latest/sambastudio-intro.html) SambaStudio is a rich, GUI-based platform that provides the functionality to train, deploy, and manage models in SambaNova [DataScale](https://sambanova.ai/products/datascale) systems.
+
+## Overview
+### Integration details
+
+| Class | Package | Local | Serializable | JS support | Package downloads | Package latest |
+| :--- | :--- | :---: | :---: |  :---: | :---: | :---: |
+| [ChatSambaStudio](https://api.python.langchain.com/en/latest/chat_models/langchain_community.chat_models.sambanova.ChatSambaStudio.html) | [langchain-community](https://python.langchain.com/api_reference/community/index.html) | ❌ | ❌ | ❌ | ![PyPI - Downloads](https://img.shields.io/pypi/dm/langchain_community?style=flat-square&label=%20) | ![PyPI - Version](https://img.shields.io/pypi/v/langchain_community?style=flat-square&label=%20) |
+
+### Model features
+
+| [Tool calling](/docs/how_to/tool_calling) | [Structured output](/docs/how_to/structured_output/) | JSON mode | [Image input](/docs/how_to/multimodal_inputs/) | Audio input | Video input | [Token-level streaming](/docs/how_to/chat_streaming/) | Native async | [Token usage](/docs/how_to/chat_token_usage_tracking/) | [Logprobs](/docs/how_to/logprobs/) |
+| :---: | :---: | :---: | :---: |  :---: | :---: | :---: | :---: | :---: | :---: |
+| ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ✅ | ✅ | ❌ | 
+
+## Setup
+
+To access ChatSambaStudio models you will need to [deploy an endpoint](https://docs.sambanova.ai/sambastudio/latest/language-models.html) in your SambaStudio platform, install the `langchain_community` integration package, and install the `SSEClient` Package.
+
+```bash
+pip install langchain-community
+pip install sseclient-py
+```
+
+### Credentials
+
+Get the URL and API Key from your SambaStudio deployed endpoint and add them to your environment variables:
+
+``` bash
+export SAMBASTUDIO_URL="your-api-key-here"
+export SAMBASTUDIO_API_KEY="your-api-key-here"
+```
+
+[code]
+import getpass
+import os
+
+if not os.getenv("SAMBASTUDIO_URL"):
+    os.environ["SAMBASTUDIO_URL"] = getpass.getpass("Enter your SambaStudio URL: ")
+if not os.getenv("SAMBASTUDIO_API_KEY"):
+    os.environ["SAMBASTUDIO_API_KEY"] = getpass.getpass(
+        "Enter your SambaStudio API key: "
+    )
+
+[markdown]
+If you want to get automated tracing of your model calls you can also set your [LangSmith](https://docs.smith.langchain.com/) API key by uncommenting below:
+
+[code]
+# os.environ["LANGCHAIN_TRACING_V2"] = "true"
+# os.environ["LANGCHAIN_API_KEY"] = getpass.getpass("Enter your LangSmith API key: ")
+
+[markdown]
+### Installation
+
+The LangChain __SambaStudio__ integration lives in the `langchain_community` package:
+
+[code]
+%pip install -qU langchain-community
+%pip install -qu sseclient-py
+
+[markdown]
+## Instantiation
+
+Now we can instantiate our model object and generate chat completions:
+
+[code]
+from langchain_community.chat_models.sambanova import ChatSambaStudio
+
+llm = ChatSambaStudio(
+    model="Meta-Llama-3-70B-Instruct-4096",  # set if using a CoE endpoint
+    max_tokens=1024,
+    temperature=0.7,
+    top_k=1,
+    top_p=0.01,
+    do_sample=True,
+    process_prompt="True",  # set if using a CoE endpoint
+)
+
+[markdown]
+## Invocation
+
+[code]
+messages = [
+    (
+        "system",
+        "You are a helpful assistant that translates English to French. Translate the user sentence.",
+    ),
+    ("human", "I love programming."),
+]
+ai_msg = llm.invoke(messages)
+ai_msg
+
+[output]
+AIMessage(content="J'adore la programmation.", response_metadata={'id': 'item0', 'partial': False, 'value': {'completion': "J'adore la programmation.", 'logprobs': {'text_offset': [], 'top_logprobs': []}, 'prompt': '<|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant that translates English to French. Translate the user sentence.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nI love programming.<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n', 'stop_reason': 'end_of_text', 'tokens': ['J', "'", 'ad', 'ore', ' la', ' programm', 'ation', '.'], 'total_tokens_count': 43}, 'params': {}, 'status': None}, id='item0')
+
+[code]
+print(ai_msg.content)
+
+[output]
+J'adore la programmation.
+
+
+[markdown]
+## Chaining
+
+We can [chain](/docs/how_to/sequence/) our model with a prompt template like so:
+
+[code]
+from langchain_core.prompts import ChatPromptTemplate
+
+prompt = ChatPromptTemplate(
+    [
+        (
+            "system",
+            "You are a helpful assistant that translates {input_language} to {output_language}.",
+        ),
+        ("human", "{input}"),
+    ]
+)
+
+chain = prompt | llm
+chain.invoke(
+    {
+        "input_language": "English",
+        "output_language": "German",
+        "input": "I love programming.",
+    }
+)
+
+[output]
+AIMessage(content='Ich liebe das Programmieren.', response_metadata={'id': 'item0', 'partial': False, 'value': {'completion': 'Ich liebe das Programmieren.', 'logprobs': {'text_offset': [], 'top_logprobs': []}, 'prompt': '<|start_header_id|>system<|end_header_id|>\n\nYou are a helpful assistant that translates English to German.<|eot_id|><|start_header_id|>user<|end_header_id|>\n\nI love programming.<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n', 'stop_reason': 'end_of_text', 'tokens': ['Ich', ' liebe', ' das', ' Programm', 'ieren', '.'], 'total_tokens_count': 36}, 'params': {}, 'status': None}, id='item0')
+
+[markdown]
+## Streaming
+
+[code]
+system = "You are a helpful assistant with pirate accent."
+human = "I want to learn more about this animal: {animal}"
+prompt = ChatPromptTemplate.from_messages([("system", system), ("human", human)])
+
+chain = prompt | llm
+
+for chunk in chain.stream({"animal": "owl"}):
+    print(chunk.content, end="", flush=True)
+
+[output]
+Arrr, ye landlubber! Ye be wantin' to learn about owls, eh? Well, matey, settle yerself down with a pint o' grog and listen close, for I be tellin' ye about these fascinatin' creatures o' the night!
+
+Owls be birds, but not just any birds, me hearty! They be nocturnal, meanin' they do their huntin' at night, when the rest o' the world be sleepin'. And they be experts at it, too! Their big, round eyes be designed for seein' in the dark, with a special reflective layer called the tapetum lucidum that helps 'em spot prey in the shadows. It's like havin' a built-in lantern, savvy?
+
+But that be not all, me matey! Owls also have acute hearin', which helps 'em pinpoint the slightest sounds in the dark. And their ears be asymmetrical, meanin' one ear be higher than the other, which gives 'em better depth perception. It's like havin' a built-in sonar system, arrr!
+
+Now, ye might be wonderin' how owls fly so silently, like ghosts in the night. Well, it be because o' their special feathers, me hearty! They have soft, fringed feathers on their wings that help reduce noise and turbulence, makin' 'em the sneakiest flyers on the seven seas... er, skies!
+
+Owls come in all shapes and sizes, from the tiny elf owl to the great grey owl, which be one o' the largest owl species in the world. And they be found on every continent, except Antarctica, o' course. They be solitary creatures, but some species be known to form long-term monogamous relationships, like the barn owl and its mate.
+
+So, there ye have it, me hearty! Owls be amazin' creatures, with their clever adaptations and stealthy ways. Now, go forth and spread the word about these magnificent birds o' the night! And remember, if ye ever encounter an owl in the wild, be sure to show respect and keep a weather eye open, or ye might just find yerself on the receivin' end o' a silent, flyin' tackle! Arrr!
+
+[markdown]
+## Async
+
+[code]
+prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "human",
+            "what is the capital of {country}?",
+        )
+    ]
+)
+
+chain = prompt | llm
+await chain.ainvoke({"country": "France"})
+
+[output]
+AIMessage(content='The capital of France is Paris.', response_metadata={'id': 'item0', 'partial': False, 'value': {'completion': 'The capital of France is Paris.', 'logprobs': {'text_offset': [], 'top_logprobs': []}, 'prompt': '<|start_header_id|>user<|end_header_id|>\n\nwhat is the capital of France?<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n', 'stop_reason': 'end_of_text', 'tokens': ['The', ' capital', ' of', ' France', ' is', ' Paris', '.'], 'total_tokens_count': 24}, 'params': {}, 'status': None}, id='item0')
+
+[markdown]
+## Async Streaming
+
+[code]
+prompt = ChatPromptTemplate.from_messages(
+    [
+        (
+            "human",
+            "in less than {num_words} words explain me {topic} ",
+        )
+    ]
+)
+chain = prompt | llm
+
+async for chunk in chain.astream({"num_words": 30, "topic": "quantum computers"}):
+    print(chunk.content, end="", flush=True)
+
+[output]
+Quantum computers use quantum bits (qubits) to process multiple possibilities simultaneously, exponentially faster than classical computers, enabling breakthroughs in fields like cryptography, optimization, and simulation.
+
+[markdown]
+## API reference
+
+For detailed documentation of all ChatSambaStudio features and configurations head to the API reference: https://api.python.langchain.com/en/latest/chat_models/langchain_community.chat_models.sambanova.ChatSambaStudio.html
+

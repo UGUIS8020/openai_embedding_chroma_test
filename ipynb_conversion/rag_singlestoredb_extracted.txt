@@ -1,0 +1,14 @@
+[markdown]
+## Connect to template
+
+In `server.py`, set -
+```
+add_routes(app, chain_ext, path="/rag_singlestore")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+rag_app_singlestore = RemoteRunnable("http://0.0.0.0:8001/rag_singlestore")
+rag_app_singlestore.invoke("How does agent memory work?")
+

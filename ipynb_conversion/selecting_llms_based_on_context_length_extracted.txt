@@ -1,0 +1,58 @@
+[markdown]
+# Selecting LLMs based on Context Length
+
+Different LLMs have different context lengths. As a very immediate an practical example, OpenAI has two versions of GPT-3.5-Turbo: one with 4k context, another with 16k context. This notebook shows how to route between them based on input.
+
+[code]
+from langchain.prompts import PromptTemplate
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompt_values import PromptValue
+from langchain_openai import ChatOpenAI
+
+[code]
+short_context_model = ChatOpenAI(model="gpt-3.5-turbo")
+long_context_model = ChatOpenAI(model="gpt-3.5-turbo-16k")
+
+[code]
+def get_context_length(prompt: PromptValue):
+    messages = prompt.to_messages()
+    tokens = short_context_model.get_num_tokens_from_messages(messages)
+    return tokens
+
+[code]
+prompt = PromptTemplate.from_template("Summarize this passage: {context}")
+
+[code]
+def choose_model(prompt: PromptValue):
+    context_len = get_context_length(prompt)
+    if context_len < 30:
+        print("short model")
+        return short_context_model
+    else:
+        print("long model")
+        return long_context_model
+
+[code]
+chain = prompt | choose_model | StrOutputParser()
+
+[code]
+chain.invoke({"context": "a frog went to a pond"})
+
+[output]
+short model
+
+'The passage mentions that a frog visited a pond.'
+
+[code]
+chain.invoke(
+    {"context": "a frog went to a pond and sat on a log and went to a different pond"}
+)
+
+[output]
+long model
+
+'The passage describes a frog that moved from one pond to another and perched on a log.'
+
+[code]
+
+

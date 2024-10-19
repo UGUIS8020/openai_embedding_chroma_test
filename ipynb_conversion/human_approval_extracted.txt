@@ -1,0 +1,127 @@
+[markdown]
+# Human-in-the-loop Tool Validation
+
+This walkthrough demonstrates how to add human validation to any Tool. We'll do this using the `HumanApprovalCallbackhandler`.
+
+Let's suppose we need to make use of the `ShellTool`. Adding this tool to an automated flow poses obvious risks. Let's see how we could enforce manual human approval of inputs going into this tool.
+
+**Note**: We generally recommend against using the `ShellTool`. There's a lot of ways to misuse it, and it's not required for most use cases. We employ it here only for demonstration purposes.
+
+[code]
+from langchain.callbacks import HumanApprovalCallbackHandler
+from langchain.tools import ShellTool
+
+[code]
+tool = ShellTool()
+
+[code]
+print(tool.run("echo Hello World!"))
+
+[output]
+Hello World!
+
+
+
+[markdown]
+## Adding Human Approval
+Adding the default `HumanApprovalCallbackHandler` to the tool will make it so that a user has to manually approve every input to the tool before the command is actually executed.
+
+[code]
+tool = ShellTool(callbacks=[HumanApprovalCallbackHandler()])
+
+[code]
+print(tool.run("ls /usr"))
+
+[output]
+Do you approve of the following input? Anything except 'Y'/'Yes' (case-insensitive) will be treated as a no.
+
+ls /usr
+yes
+[35mX11[m[m
+[35mX11R6[m[m
+[1m[36mbin[m[m
+[1m[36mlib[m[m
+[1m[36mlibexec[m[m
+[1m[36mlocal[m[m
+[1m[36msbin[m[m
+[1m[36mshare[m[m
+[1m[36mstandalone[m[m
+
+
+
+[code]
+print(tool.run("ls /private"))
+
+[output]
+Do you approve of the following input? Anything except 'Y'/'Yes' (case-insensitive) will be treated as a no.
+
+ls /private
+no
+
+
+[markdown]
+## Configuring Human Approval
+
+Let's suppose we have an agent that takes in multiple tools, and we want it to only trigger human approval requests on certain tools and certain inputs. We can configure out callback handler to do just this.
+
+[code]
+from langchain.agents import AgentType, initialize_agent, load_tools
+from langchain_openai import OpenAI
+
+[code]
+def _should_check(serialized_obj: dict) -> bool:
+    # Only require approval on ShellTool.
+    return serialized_obj.get("name") == "terminal"
+
+
+def _approve(_input: str) -> bool:
+    if _input == "echo 'Hello World'":
+        return True
+    msg = (
+        "Do you approve of the following input? "
+        "Anything except 'Y'/'Yes' (case-insensitive) will be treated as a no."
+    )
+    msg += "\n\n" + _input + "\n"
+    resp = input(msg)
+    return resp.lower() in ("yes", "y")
+
+
+callbacks = [HumanApprovalCallbackHandler(should_check=_should_check, approve=_approve)]
+
+[code]
+llm = OpenAI(temperature=0)
+tools = load_tools(["wikipedia", "llm-math", "terminal"], llm=llm)
+agent = initialize_agent(
+    tools,
+    llm,
+    agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION,
+)
+
+[code]
+agent.run(
+    "It's 2023 now. How many years ago did Konrad Adenauer become Chancellor of Germany.",
+    callbacks=callbacks,
+)
+
+[output]
+'Konrad Adenauer became Chancellor of Germany in 1949, 74 years ago.'
+
+[code]
+agent.run("print 'Hello World' in the terminal", callbacks=callbacks)
+
+[output]
+'Hello World'
+
+[code]
+agent.run("list all directories in /private", callbacks=callbacks)
+
+[output]
+Do you approve of the following input? Anything except 'Y'/'Yes' (case-insensitive) will be treated as a no.
+
+ls /private
+no
+
+
+[code]
+
+

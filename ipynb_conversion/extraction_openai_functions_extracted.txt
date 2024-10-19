@@ -1,0 +1,35 @@
+[markdown]
+## Document Loading
+
+Load a blog post on agents.
+
+[code]
+from langchain_community.document_loaders import WebBaseLoader
+
+loader = WebBaseLoader("https://lilianweng.github.io/posts/2023-06-23-agent/")
+text = loader.load()
+
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain_ext, path="/extraction_openai_functions")
+```
+
+[code]
+from langserve.client import RemoteRunnable
+
+oai_function = RemoteRunnable("http://0.0.0.0:8001/extraction_openai_functions")
+
+[markdown]
+The function wille extract paper titles and authors from an input.
+
+[code]
+oai_function.invoke({"input": text[0].page_content[0:4000]})
+
+[output]
+[{'title': 'Chain of Thought', 'author': 'Wei et al. 2022'},
+ {'title': 'Tree of Thoughts', 'author': 'Yao et al. 2023'},
+ {'title': 'LLM+P', 'author': 'Liu et al. 2023'}]
+

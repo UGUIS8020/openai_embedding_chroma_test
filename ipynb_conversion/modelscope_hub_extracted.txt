@@ -1,0 +1,25 @@
+[markdown]
+# ModelScope
+
+>[ModelScope](https://www.modelscope.cn/home) is big repository of the models and datasets.
+
+Let's load the ModelScope Embedding class.
+
+[code]
+from langchain_community.embeddings import ModelScopeEmbeddings
+
+[code]
+model_id = "damo/nlp_corom_sentence-embedding_english-base"
+
+[code]
+embeddings = ModelScopeEmbeddings(model_id=model_id)
+
+[code]
+text = "This is a test document."
+
+[code]
+query_result = embeddings.embed_query(text)
+
+[code]
+doc_results = embeddings.embed_documents(["foo"])
+

@@ -1,0 +1,138 @@
+[markdown]
+# Rewrite-Retrieve-Read
+
+**Rewrite-Retrieve-Read** is a method proposed in the paper [Query Rewriting for Retrieval-Augmented Large Language Models](https://arxiv.org/pdf/2305.14283.pdf)
+
+> Because the original query can not be always optimal to retrieve for the LLM, especially in the real world... we first prompt an LLM to rewrite the queries, then conduct retrieval-augmented reading
+
+We show how you can easily do that with LangChain Expression Language
+
+[markdown]
+## Baseline
+
+Baseline RAG (**Retrieve-and-read**) can be done like the following:
+
+[code]
+from langchain_community.utilities import DuckDuckGoSearchAPIWrapper
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.runnables import RunnablePassthrough
+from langchain_openai import ChatOpenAI
+
+[code]
+template = """Answer the users question based only on the following context:
+
+<context>
+{context}
+</context>
+
+Question: {question}
+"""
+prompt = ChatPromptTemplate.from_template(template)
+
+model = ChatOpenAI(temperature=0)
+
+search = DuckDuckGoSearchAPIWrapper()
+
+
+def retriever(query):
+    return search.run(query)
+
+[code]
+chain = (
+    {"context": retriever, "question": RunnablePassthrough()}
+    | prompt
+    | model
+    | StrOutputParser()
+)
+
+[code]
+simple_query = "what is langchain?"
+
+[code]
+chain.invoke(simple_query)
+
+[output]
+"LangChain is a powerful and versatile Python library that enables developers and researchers to create, experiment with, and analyze language models and agents. It simplifies the development of language-based applications by providing a suite of features for artificial general intelligence. It can be used to build chatbots, perform document analysis and summarization, and streamline interaction with various large language model providers. LangChain's unique proposition is its ability to create logical links between one or more language models, known as Chains. It is an open-source library that offers a generic interface to foundation models and allows prompt management and integration with other components and tools."
+
+[markdown]
+While this is fine for well formatted queries, it can break down for more complicated queries
+
+[code]
+distracted_query = "man that sam bankman fried trial was crazy! what is langchain?"
+
+[code]
+chain.invoke(distracted_query)
+
+[output]
+'Based on the given context, there is no information provided about "langchain."'
+
+[markdown]
+This is because the retriever does a bad job with these "distracted" queries
+
+[code]
+retriever(distracted_query)
+
+[output]
+'Business She\'s the star witness against Sam Bankman-Fried. Her testimony was explosive Gary Wang, who co-founded both FTX and Alameda Research, said Bankman-Fried directed him to change a... The Verge, following the trial\'s Oct. 4 kickoff: "Is Sam Bankman-Fried\'s Defense Even Trying to Win?". CBS Moneywatch, from Thursday: "Sam Bankman-Fried\'s Lawyer Struggles to Poke ... Sam Bankman-Fried, FTX\'s founder, responded with a single word: "Oof.". Less than a year later, Mr. Bankman-Fried, 31, is on trial in federal court in Manhattan, fighting criminal charges ... July 19, 2023. A U.S. judge on Wednesday overruled objections by Sam Bankman-Fried\'s lawyers and allowed jurors in the FTX founder\'s fraud trial to see a profane message he sent to a reporter days ... Sam Bankman-Fried, who was once hailed as a virtuoso in cryptocurrency trading, is on trial over the collapse of FTX, the financial exchange he founded. Bankman-Fried is accused of...'
+
+[markdown]
+## Rewrite-Retrieve-Read Implementation
+
+The main part is a rewriter to rewrite the search query
+
+[code]
+template = """Provide a better search query for \
+web search engine to answer the given question, end \
+the queries with ’**’. Question: \
+{x} Answer:"""
+rewrite_prompt = ChatPromptTemplate.from_template(template)
+
+[code]
+from langchain import hub
+
+rewrite_prompt = hub.pull("langchain-ai/rewrite")
+
+[code]
+print(rewrite_prompt.template)
+
+[output]
+Provide a better search query for web search engine to answer the given question, end the queries with ’**’.  Question {x} Answer:
+
+
+[code]
+# Parser to remove the `**`
+
+
+def _parse(text):
+    return text.strip('"').strip("**")
+
+[code]
+rewriter = rewrite_prompt | ChatOpenAI(temperature=0) | StrOutputParser() | _parse
+
+[code]
+rewriter.invoke({"x": distracted_query})
+
+[output]
+'What is the definition and purpose of Langchain?'
+
+[code]
+rewrite_retrieve_read_chain = (
+    {
+        "context": {"x": RunnablePassthrough()} | rewriter | retriever,
+        "question": RunnablePassthrough(),
+    }
+    | prompt
+    | model
+    | StrOutputParser()
+)
+
+[code]
+rewrite_retrieve_read_chain.invoke(distracted_query)
+
+[output]
+'Based on the given context, LangChain is an open-source framework designed to simplify the creation of applications using large language models (LLMs). It enables LLM models to generate responses based on up-to-date online information and simplifies the organization of large volumes of data for easy access by LLMs. LangChain offers a standard interface for chains, integrations with other tools, and end-to-end chains for common applications. It is a robust library that streamlines interaction with various LLM providers. LangChain\'s unique proposition is its ability to create logical links between one or more LLMs, known as Chains. It is an AI framework with features that simplify the development of language-based applications and offers a suite of features for artificial general intelligence. However, the context does not provide any information about the "sam bankman fried trial" mentioned in the question.'
+
+[code]
+
+

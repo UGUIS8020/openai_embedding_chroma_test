@@ -1,0 +1,21 @@
+[markdown]
+## Run Template
+
+In `server.py`, set -
+```
+add_routes(app, chain, path="/sql_ollama")
+```
+
+This template includes an example DB of 2023 NBA rosters.
+
+We can  ask questions related to NBA players. 
+
+[code]
+from langserve.client import RemoteRunnable
+
+sql_app = RemoteRunnable("http://0.0.0.0:8001/sql_ollama")
+sql_app.invoke({"question": "What team is Klay Thompson on?"})
+
+[output]
+AIMessage(content=' Sure! Here\'s the natural language response based on the input:\n\n"Klay Thompson plays for the Golden State Warriors."')
+
